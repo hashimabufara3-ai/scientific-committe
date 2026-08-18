@@ -1,0 +1,84 @@
+"use client";
+
+import Link from "next/link";
+import { useActionState } from "react";
+import { signIn } from "../../lib/auth/actions";
+import { Field, PrimaryButton, TextInput } from "../contribute/primitives";
+import { AuthAlert } from "./auth-shell";
+import type { DictionaryData } from "../../app/[lang]/dictionaries";
+
+export function SignInForm({
+  lang,
+  dict,
+  next,
+  linkError,
+  resetSuccess,
+}: {
+  lang: string;
+  dict: DictionaryData["auth"];
+  next?: string;
+  linkError?: string;
+  resetSuccess: boolean;
+}) {
+  const [state, formAction, pending] = useActionState(signIn, {});
+
+  return (
+    <div className="space-y-6">
+      {resetSuccess && (
+        <AuthAlert variant="success">
+          {dict.signIn.passwordResetSuccess}
+        </AuthAlert>
+      )}
+      {linkError && <AuthAlert variant="error">{linkError}</AuthAlert>}
+      {state.error && <AuthAlert variant="error">{state.error}</AuthAlert>}
+
+      <form action={formAction} noValidate className="space-y-5">
+        <input type="hidden" name="lang" value={lang} />
+        <input
+          type="hidden"
+          name="next"
+          value={next ?? `/${lang}`}
+        />
+        <Field label={dict.signIn.email} htmlFor="email" required>
+          <TextInput
+            id="email"
+            name="email"
+            type="email"
+            autoComplete="email"
+            placeholder={dict.signIn.emailPlaceholder}
+          />
+        </Field>
+        <Field label={dict.signIn.password} htmlFor="password" required>
+          <TextInput
+            id="password"
+            name="password"
+            type="password"
+            autoComplete="current-password"
+            placeholder={dict.signIn.passwordPlaceholder}
+          />
+        </Field>
+        <div className="flex justify-end">
+          <Link
+            href={`/${lang}/auth/forgot-password`}
+            className="text-xs font-medium text-accent transition-colors hover:text-accent-bright"
+          >
+            {dict.signIn.forgotPassword}
+          </Link>
+        </div>
+        <PrimaryButton type="submit" disabled={pending} className="w-full">
+          {pending ? dict.signIn.submitLoading : dict.signIn.submit}
+        </PrimaryButton>
+      </form>
+
+      <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-5">
+        <p className="text-sm text-muted">{dict.signIn.noAccount}</p>
+        <Link
+          href={`/${lang}/auth/sign-up`}
+          className="text-sm font-semibold text-accent transition-colors hover:text-accent-bright"
+        >
+          {dict.signIn.signUpLink}
+        </Link>
+      </div>
+    </div>
+  );
+}

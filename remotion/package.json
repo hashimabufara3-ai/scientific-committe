@@ -1,0 +1,9 @@
+{
+  "name": "scientific-committee-remotion",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "studio": "remotion studio index.ts",
+    "render": "remotion render index.ts ScientificCommitteeHero out/hero.mp4"
+  }
+}

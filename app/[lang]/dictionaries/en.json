@@ -1,0 +1,545 @@
+{
+  "metadata": {
+    "siteName": "Scientific Committee",
+    "university": "Palestine Technical University – Kadoorie",
+    "campus": "PTUK – Al-Aroub Branch",
+    "description": "The Scientific Committee at Palestine Technical University – Kadoorie, Al-Aroub Branch. A student-led hub for educational resources, workshops, technical opportunities, and academic discussion.",
+    "keywords": [
+      "Scientific Committee",
+      "PTUK",
+      "Kadoorie",
+      "Al-Aroub",
+      "students",
+      "workshops",
+      "resources"
+    ]
+  },
+  "nav": {
+    "home": "Home",
+    "about": "About",
+    "resources": "Summaries",
+    "contribute": "Contribute",
+    "admin": "Management",
+    "contact": "Contact",
+    "cta": "Join the Committee",
+    "signIn": "Sign in",
+    "signOut": "Sign out",
+    "account": "Account",
+    "skipToContent": "Skip to content"
+  },
+  "hero": {
+    "kicker": "Palestine Technical University – Kadoorie · Al-Aroub Branch",
+    "titleA": "Where students",
+    "titleHighlight": "turn curiosity into capability.",
+    "subtitle": "The Scientific Committee is a student-led community that turns academic knowledge into practical skills — through summaries, opportunities, and open discussion.",
+    "ctaPrimary": "Browse summaries",
+    "ctaSecondary": "Get involved",
+    "scroll": "Scroll to explore"
+  },
+  "stats": {
+    "committeeMembers": "Committee members"
+  },
+  "pillars": {
+    "kicker": "What we do",
+    "title": "Our pillars, one community",
+    "subtitle": "Everything we do is designed to make learning clearer, more practical, and more collaborative for PTUK students.",
+    "items": [
+      {
+        "icon": "book",
+        "title": "Educational summaries",
+        "description": "Clear, student-made summaries of course material that make revision faster and understanding deeper."
+      },
+      {
+        "icon": "community",
+        "title": "Community & discussion",
+        "description": "A space for students to ask, explain, and share knowledge across the campus."
+      }
+    ]
+  },
+  "community": {
+    "kicker": "Community",
+    "title": "Academic & technical discussions",
+    "subtitle": "We keep the conversation going between lectures — on campus and online. Ask a question, explain a topic, or find a study partner.",
+    "topics": [
+      "Programming & Algorithms",
+      "Networks & Security",
+      "Mathematics",
+      "Career & Internships"
+    ],
+    "cta": "Join the discussion",
+    "note": "Discussion groups are hosted by the committee"
+  },
+  "join": {
+    "title": "Want to be part of the committee?",
+    "description": "We are always looking for curious, motivated students. No experience required — just willingness to learn and share.",
+    "cta": "Contact us to join"
+  },
+  "about": {
+    "kicker": "About",
+    "title": "The Scientific Committee",
+    "subtitle": "Who we are, what we believe in, and the people behind the work.",
+    "missionTitle": "Our mission",
+    "mission": "To make technical and academic knowledge accessible, practical, and collaborative for every student at the university.",
+    "membersKicker": "Team",
+    "membersTitle": "Meet the committee",
+    "membersSubtitle": "A rotating team of student volunteers from across our majors.",
+    "membersPrev": "Previous member",
+    "membersNext": "Next member",
+    "activitiesKicker": "Activities",
+    "activitiesTitle": "What we do on campus",
+    "activities": [
+      {
+        "title": "Study Sessions",
+        "description": "Sessions led by committee members to help students solve their problems."
+      },
+      {
+        "title": "Tech competitions",
+        "description": "We help teams form, prepare, and compete in local and national challenges."
+      },
+      {
+        "title": "Career panels",
+        "description": "Lectures and meetups by companies at the university branch."
+      }
+    ]
+  },
+  "contributePage": {
+    "kicker": "Contributor workspace",
+    "title": "Contribute to the knowledge hive",
+    "subtitle": "Add summaries to materials and attach YouTube videos, and manage your own contributions from one place.",
+    "contributingAs": "Contributing as",
+    "you": "You",
+    "trustChip": "Contributions are visible to everyone once published",
+    "viewPublic": "View public site",
+    "open": "Open",
+    "subjectsTitle": "Materials",
+    "subjectsSubtitle": "Each material collects the summaries students contribute. Add a summary to an existing material or create a new one.",
+    "subjectsEmpty": "No subjects added yet. Start by adding your first subject.",
+    "nav": {
+      "dashboard": "Dashboard"
+    },
+    "stats": {
+      "subjects": "Materials",
+      "summaries": "Summaries",
+      "videos": "Videos"
+    },
+    "toast": {
+      "createdSummary": "Summary published",
+      "createdExam": "Previous exam added",
+      "updated": "Changes saved",
+      "deleted": "Deleted"
+    },
+    "actions": {
+      "addSummary": "Add summary",
+      "addExam": "Add previous exam",
+      "create": "Create",
+      "save": "Save changes",
+      "cancel": "Cancel",
+      "publish": "Publish",
+      "optional": "Optional",
+      "edit": "Edit",
+      "delete": "Delete",
+      "addVideo": "Add another video"
+    },
+    "workspace": {
+      "subjectTag": "Material",
+      "summaries": "Summaries",
+      "videos": "Videos",
+      "noSummaries": "No summaries yet — publish the first one.",
+      "addedBy": "Added by {name}",
+      "counts": {
+        "summary": "summary",
+        "summaries": "summaries",
+        "video": "video",
+        "videos": "videos",
+        "exam": "exam",
+        "exams": "exams"
+      }
+    },
+    "previousExams": {
+      "title": "Previous Exams",
+      "noExams": "No previous exams yet — add the first one.",
+      "midterm": "Midterm",
+      "final": "Final",
+      "semesters": {
+        "first": "First semester",
+        "second": "Second semester",
+        "summer": "Summer semester"
+      }
+    },
+    "contributions": {
+      "kicker": "Your work",
+      "title": "My contributions",
+      "subtitle": "Everything you have created, gathered in one list.",
+      "empty": "Nothing here yet — everything you create will show up here.",
+      "inSubject": "in {subject}",
+      "openSubject": "Open subject"
+    },
+    "activity": {
+      "kicker": "Feed",
+      "title": "Recent activity",
+      "subject": "Created subject \"{title}\"",
+      "summary": "Published \"{title}\"",
+      "video": "Attached a video",
+      "exam": "Shared the \"{title}\" previous exam",
+      "edit": "Edited \"{title}\"",
+      "delete": "Deleted \"{title}\"",
+      "time": {
+        "justNow": "just now",
+        "minutes": "{n} min ago",
+        "hours": "{n} hr ago",
+        "days": "{n} days ago"
+      }
+    },
+    "forms": {
+      "subjectName": "Material name",
+      "subjectNamePlaceholder": "e.g. Computer Networks",
+      "subjectChoose": "Choose a material",
+      "subjectExisting": "Existing materials",
+      "subjectNew": "Add new material",
+      "subjectNewName": "New material name",
+      "subjectNewNamePlaceholder": "e.g. Operating Systems",
+      "subjectDuplicate": "This material already exists — choose it from the list instead.",
+      "subjectDuplicateSelect": "Select this material",
+      "noSubjectsYet": "No materials yet — the first summary will create one.",
+      "subjectSearch": "Search materials...",
+      "subjectSearchEmpty": "No materials match your search",
+      "summaryTitle": "Summary title",
+      "summaryTitlePlaceholder": "e.g. Subnetting — Cheat Sheet",
+      "summaryHint": "Summaries are published and visible to everyone once submitted.",
+      "summaryContent": "Note",
+      "sourceTabContent": "Summary text",
+      "sourceTabUpload": "Upload file",
+      "contentPlaceholder": "Paste or write the note here...",
+      "filePrompt": "Choose a file to upload",
+      "fileChosen": "Selected: {file}",
+      "videos": "Attach YouTube videos if available",
+      "videosPlaceholder": "https://www.youtube.com/watch?v=…",
+      "videosHint": "YouTube is optional — you can publish without any videos.",
+      "addVideo": "Add another video",
+      "removeVideo": "Remove video",
+      "fileTooLarge": "That file is larger than 2 MB — please choose a smaller one.",
+      "fileReadError": "That file could not be read — please try another one.",
+      "examType": "Exam type",
+      "examFile": "Exam file",
+      "year": "Academic year",
+      "yearPlaceholder": "e.g. 2024/2025",
+      "yearUnknown": "Year is unknown",
+      "semester": "Semester",
+      "semesterUnknown": "Unknown",
+      "examHint": "Previous exams are published and visible to everyone once submitted.",
+      "attachExam": "Attach a previous exam, if available"
+    },
+    "delete": {
+      "title": "Delete \"{name}\"?",
+      "and": "and",
+      "nothing": "no content",
+      "subjectBody": "This will permanently remove the material along with {contents}.",
+      "summaryBody": "This will permanently remove the summary.",
+      "examBody": "This will permanently remove this previous exam.",
+      "cancel": "Cancel",
+      "confirm": "Delete"
+    }
+  },
+  "contactPage": {
+    "kicker": "Contact",
+    "title": "Get in touch",
+    "subtitle": "Questions, ideas, or want to join? Reach the committee any day of the week.",
+    "location": "PTUK – Al-Aroub Branch",
+    "availability": "Availability: 9:00 AM – 2:00 PM",
+    "socialsLabel": "Follow the committee",
+    "socials": [
+      {
+        "label": "Instagram",
+        "handle": "@scientific.committee",
+        "url": "https://www.instagram.com/scientific.committee/"
+      },
+      {
+        "label": "Discord",
+        "handle": "Join us on Discord",
+        "url": "https://discord.gg/5uzwmZtdV"
+      }
+    ]
+  },
+  "footer": {
+    "tagline": "The Scientific Committee is a student-led hub at Palestine Technical University – Kadoorie, Al-Aroub Branch.",
+    "quickLinks": "Quick links",
+    "contact": "Contact",
+    "follow": "Follow us",
+    "location": "PTUK – Al-Aroub Branch",
+    "rights": "Palestine Technical University – Kadoorie",
+    "madeBy": "Designed & Developed by Hashim Abufara"
+  },
+  "resourcesPage": {
+    "kicker": "Summaries",
+    "title": "Summaries",
+    "subtitle": "Student-made summaries, cheat sheets, and guides — organized by subject so you can find what you need fast.",
+    "categories": [
+      {
+        "id": "all",
+        "label": "All"
+      },
+      {
+        "id": "programming",
+        "label": "Programming"
+      },
+      {
+        "id": "engineering",
+        "label": "Engineering"
+      },
+      {
+        "id": "math",
+        "label": "Mathematics"
+      },
+      {
+        "id": "science",
+        "label": "Science"
+      },
+      {
+        "id": "general",
+        "label": "General"
+      }
+    ],
+    "stage": {
+      "hint": "Drag · scroll · or use the arrow keys to move through the archive.",
+      "filter": "Filter summaries",
+      "flip": "Flip card",
+      "back": "Back to summary",
+      "open": "Open summary",
+      "of": "of",
+      "prev": "Previous summary",
+      "next": "Next summary"
+    },
+    "library": {
+      "kicker": "Library",
+      "title": "All materials",
+      "subtitle": "Every material in one place.",
+      "open": "Open material",
+      "empty": "No materials yet.",
+      "emptyHint": "Student-made summaries, exam papers, and study guides will appear here as contributors publish them.",
+      "emptyAction": "Contact the committee",
+      "search": "Search materials...",
+      "noResults": "No materials found"
+    },
+    "detail": {
+      "back": "All summaries",
+      "backToSubject": "Back to material",
+      "files": "Summaries",
+      "filesSubtitle": "Available summaries for this material.",
+      "readFile": "Read",
+      "uploadedBy": "Uploaded by",
+      "pages": "pages",
+      "view": "View",
+      "externalResources": "External Resources",
+      "externalResourcesSubtitle": "Additional resources and videos.",
+      "watch": "Watch",
+      "download": "Download",
+      "youtubeFallback": "YouTube video"
+    }
+  },
+  "previousExams": {
+    "kicker": "Previous exams",
+    "title": "Previous Exams",
+    "subtitle": "Past midterm and final exams shared by students for this material.",
+    "midterm": "Midterm",
+    "final": "Final",
+    "unknownYear": "Unknown year",
+    "unknownSemester": "Unknown semester",
+    "semesters": {
+      "first": "First semester",
+      "second": "Second semester",
+      "summer": "Summer semester"
+    },
+    "empty": "No previous exams yet — the first midterm or final exam shared for this material will appear here."
+  },
+  "homeResources": {
+    "readMore": "Read"
+  },
+  "adminPage": {
+    "kicker": "Administration",
+    "title": "Admin dashboard",
+    "subtitle": "Manage committee members, roles, and ownership.",
+    "search": "Search users by name or username…",
+    "searchEmpty": "No users match your search.",
+    "loadError": "Failed to load members. Refresh the page to try again.",
+    "membersTitle": "Members",
+    "memberSince": "Member since",
+    "unnamed": "Unnamed member",
+    "you": "You",
+    "noControls": "No role controls available.",
+    "transitions": {
+      "toStudent": "Make student",
+      "toContributor": "Make contributor",
+      "toAdmin": "Make admin"
+    },
+    "transfer": {
+      "title": "Transfer ownership",
+      "subtitle": "Choose the next Owner. After the transfer you immediately become an Admin and lose Owner-only capabilities. This cannot be undone.",
+      "target": "New owner",
+      "targetPlaceholder": "Select a user…",
+      "confirm": "Type the new owner's full name to confirm",
+      "confirmPlaceholder": "Type their full name…",
+      "submit": "Transfer ownership",
+      "notice": "You will become an Admin and immediately lose Owner-only capabilities."
+    },
+    "errors": {
+      "notAllowed": "This action is not allowed for your role.",
+      "notFound": "User not found.",
+      "roleUnchanged": "The role is already set.",
+      "ownerLocked": "The Owner cannot be modified.",
+      "selfChange": "You cannot change your own role.",
+      "confirmMismatch": "The typed name does not match the selected user.",
+      "transferOnlyOwner": "Only the Owner can transfer ownership.",
+      "transferSelf": "You cannot transfer ownership to yourself.",
+      "transferNotFound": "The selected user no longer exists.",
+      "generic": "The operation failed. Please try again."
+    },
+    "committeeMembers": {
+      "title": "Committee Members",
+      "subtitle": "Manage the public About Us committee members shown in the carousel.",
+      "add": "+ Add Committee Member",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteConfirm": "Remove this person from the committee? Their website account will not be deleted.",
+      "saving": "Saving…",
+      "saved": "Member saved.",
+      "deleted": "Member deleted.",
+      "empty": "No committee members yet. Add the first one.",
+      "emptyTitle": "No committee members yet",
+      "emptyDescription": "When a new member joins the committee, you can add them here so they appear in the \"About Us\" section of the website.",
+      "note": "Note: Committee Members listed here are the people displayed in the \"About Us\" section. They do not need to have an account or be registered on the website.",
+      "genderHelper": "Gender determines which visual design is used for the member in the About Us section: Male = male design, Female = female design.",
+      "websiteUser": "Website user",
+      "websiteUserHelper": "Optional. Link this committee member to an existing website account.",
+      "noWebsiteAccount": "No website account",
+      "linkedAccount": "Linked account",
+      "notLinked": "Not linked to a website account",
+      "duplicateUser": "This user is already a committee member.",
+      "noResults": "No members match your search.",
+      "nameAr": "Arabic name",
+      "nameEn": "English name",
+      "majorAr": "Arabic specialization",
+      "majorEn": "English specialization",
+      "roleAr": "Arabic role",
+      "roleEn": "English role",
+      "gender": "Gender",
+      "genderFemale": "Female",
+      "genderMale": "Male",
+      "sortOrder": "Display order",
+      "isActive": "Active",
+      "active": "Active",
+      "inactive": "Inactive",
+      "cancel": "Cancel",
+      "save": "Save",
+      "addTitle": "Add committee member",
+      "editTitle": "Edit committee member",
+      "formErrors": {
+        "nameArRequired": "Arabic name is required.",
+        "nameEnRequired": "English name is required.",
+        "majorArRequired": "Arabic specialization is required.",
+        "majorEnRequired": "English specialization is required.",
+        "roleArRequired": "Arabic role is required.",
+        "roleEnRequired": "English role is required.",
+        "genderRequired": "Gender is required.",
+        "generic": "The operation failed. Please try again."
+      }
+    }
+  },
+  "auth": {
+    "kicker": "Account",
+    "signIn": {
+      "title": "Welcome back",
+      "subtitle": "Sign in to your Scientific Committee account.",
+      "email": "Email",
+      "emailPlaceholder": "you@example.com",
+      "password": "Password",
+      "passwordPlaceholder": "Your password",
+      "submit": "Sign in",
+      "submitLoading": "Signing in…",
+      "forgotPassword": "Forgot your password?",
+      "noAccount": "Don't have an account?",
+      "signUpLink": "Create one",
+      "passwordResetSuccess": "Your password has been updated. Sign in with your new password."
+    },
+    "signUp": {
+      "title": "Join the committee",
+      "subtitle": "Create an account to manage your contributions and stay connected.",
+      "email": "Email",
+      "emailPlaceholder": "you@example.com",
+      "fullName": "Full name",
+      "fullNamePlaceholder": "e.g. Sara Hamdan",
+      "username": "Username",
+      "usernamePlaceholder": "e.g. sara_hamdan",
+      "usernameHint": "3–20 characters: lowercase letters, numbers, underscores, and periods. No spaces, hyphens, or special characters.",
+      "usernameAvailable": "This username is available.",
+      "password": "Password",
+      "passwordPlaceholder": "At least 6 characters",
+      "confirmPassword": "Confirm password",
+      "confirmPasswordPlaceholder": "Repeat your password",
+      "submit": "Create account",
+      "submitLoading": "Creating account…",
+      "haveAccount": "Already have an account?",
+      "signInLink": "Sign in",
+      "checkEmailTitle": "Check your inbox",
+      "checkEmailBody": "We sent you a confirmation link. Confirm your email to activate your account."
+    },
+    "forgot": {
+      "title": "Reset your password",
+      "subtitle": "Enter your email and we will send you a link to set a new password.",
+      "email": "Email",
+      "emailPlaceholder": "you@example.com",
+      "submit": "Send reset link",
+      "submitLoading": "Sending…",
+      "successTitle": "Check your inbox",
+      "successBody": "If an account exists for that email, a reset link is on its way.",
+      "backToSignIn": "Back to sign in"
+    },
+    "reset": {
+      "title": "Set a new password",
+      "subtitle": "Choose a new password for your account.",
+      "password": "New password",
+      "passwordPlaceholder": "At least 6 characters",
+      "confirmPassword": "Confirm new password",
+      "confirmPasswordPlaceholder": "Repeat your new password",
+      "submit": "Update password",
+      "submitLoading": "Updating…"
+    },
+    "account": {
+      "kicker": "Account",
+      "title": "My account",
+      "subtitle": "Your profile and membership details.",
+      "email": "Email",
+      "fullName": "Full name",
+      "username": "Username",
+      "editUsername": "Edit username",
+      "saveUsername": "Save",
+      "cancelUsername": "Cancel",
+      "role": "Role",
+      "memberSince": "Member since",
+      "roles": {
+        "student": "Student",
+        "contributor": "Contributor",
+        "admin": "Admin",
+        "owner": "Owner"
+      },
+      "noProfile": "We could not find a profile for this account yet.",
+      "signOut": "Sign out"
+    },
+    "errors": {
+      "invalidEmail": "Please enter a valid email address.",
+      "passwordTooShort": "Password must be at least 6 characters.",
+      "passwordsMismatch": "Passwords do not match.",
+      "usernameInvalid": "Usernames must be 3–20 characters, using lowercase letters, numbers, underscores, and periods only, and must start and end with a letter or number.",
+      "usernameReserved": "That username is reserved and cannot be used.",
+      "usernameTaken": "That username is already taken. Please choose another one.",
+      "required": "This field is required.",
+      "invalidCredentials": "Incorrect email or password.",
+      "emailNotConfirmed": "Please confirm your email before signing in.",
+      "emailInUse": "An account with this email already exists.",
+      "rateLimited": "Too many attempts — please wait a moment and try again.",
+      "network": "Network error — please check your connection and try again.",
+      "invalidToken": "This link is invalid or has expired. Please try again.",
+      "signupsDisabled": "Sign-ups are currently disabled. Please try again later.",
+      "generic": "Something went wrong. Please try again."
+    }
+  }
+}
