@@ -1,9 +1,9 @@
 {
   "metadata": {
-    "siteName": "Scientific Committee",
+    "siteName": "Scientific Committee PTUK Al-Aroub",
     "university": "Palestine Technical University – Kadoorie",
     "campus": "PTUK – Al-Aroub Branch",
-    "description": "The Scientific Committee at Palestine Technical University – Kadoorie, Al-Aroub Branch. A student-led hub for educational resources, workshops, technical opportunities, and academic discussion.",
+    "description": "Official website of the Scientific Committee at Palestine Technical University – Kadoorie, Al-Aroub branch, serving students with resources, workshops, events, and academic materials.",
     "keywords": [
       "Scientific Committee",
       "PTUK",
@@ -11,7 +11,9 @@
       "Al-Aroub",
       "students",
       "workshops",
-      "resources"
+      "resources",
+      "events",
+      "academic"
     ]
   },
   "nav": {
