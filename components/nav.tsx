@@ -76,7 +76,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
         <Logo
           href={`/${lang}`}
-          name={lang === "ar" ? dict.siteName.split(" ").slice(0, 2).join(" ") : dict.siteName}
+          name={dict.siteName.split(" ").slice(0, 2).join(" ")}
           subtitle={lang === "ar" ? dict.siteName.split(" ").slice(2).join(" ") : dict.campus}
         />
 

@@ -22,7 +22,11 @@ export function Footer({ dict, lang }: { dict: FooterDict; lang: string }) {
       <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
         <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr]">
           <div>
-            <Logo href={`/${lang}`} name={dict.siteName} subtitle={dict.campus} />
+            <Logo
+              href={`/${lang}`}
+              name={lang === "ar" ? dict.siteName.split(" ").slice(0, 2).join(" ") : dict.siteName}
+              subtitle={lang === "ar" ? dict.siteName.split(" ").slice(2).join(" ") : dict.campus}
+            />
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted">
               {dict.tagline}
             </p>
