@@ -24,7 +24,7 @@ export function Footer({ dict, lang }: { dict: FooterDict; lang: string }) {
           <div>
             <Logo
               href={`/${lang}`}
-              name={lang === "ar" ? dict.siteName.split(" ").slice(0, 2).join(" ") : dict.siteName}
+              name={dict.siteName.split(" ").slice(0, 2).join(" ")}
               subtitle={lang === "ar" ? dict.siteName.split(" ").slice(2).join(" ") : dict.campus}
             />
             <p className="mt-4 max-w-sm text-sm leading-relaxed text-muted">
