@@ -19,7 +19,8 @@ export async function GET(
   { params }: { params: Promise<{ lang: string }> }
 ) {
   const { lang } = await params;
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams, origin: requestOrigin } = new URL(request.url);
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || requestOrigin;
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type");
