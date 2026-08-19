@@ -48,6 +48,9 @@ function sanitizeNext(next: string, lang: string): string {
 }
 
 async function getOrigin(): Promise<string> {
+  const envUrl = process.env.NEXT_PUBLIC_SITE_URL;
+  if (envUrl) return envUrl;
+
   const h = await headers();
   return (
     h.get("origin") ??
