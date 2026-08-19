@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createClient } from "../../../../lib/auth/supabase-server";
+import { diag, shortId } from "../../../../lib/auth/diag-log";
 
 function resolveDestination(
   next: string | null,
@@ -28,11 +29,23 @@ export async function GET(
   { params }: { params: Promise<{ lang: string }> }
 ) {
   const { lang } = await params;
+  const corr = shortId();
   const { searchParams, origin: requestOrigin } = new URL(request.url);
   const origin = process.env.NEXT_PUBLIC_SITE_URL || requestOrigin;
   const code = searchParams.get("code");
   const tokenHash = searchParams.get("token_hash");
   const next = searchParams.get("next");
+
+  // TEMP-DIAG
+  diag("callback:GET", {
+    correlation: corr,
+    method: "GET",
+    lang,
+    hasToken: !!tokenHash,
+    hasCode: !!code,
+    next,
+    ua: request.headers.get("user-agent") ?? undefined,
+  });
 
   const fallback = resolveDestination(next, lang);
 
@@ -40,6 +53,15 @@ export async function GET(
   if (code) {
     const supabase = await createClient();
     const { error } = await supabase.auth.exchangeCodeForSession(code);
+    // TEMP-DIAG
+    diag("exchangeCode", {
+      correlation: corr,
+      method: "GET",
+      result: error ? "error" : "success",
+      name: error?.name,
+      status: error?.status,
+      message: error?.message,
+    });
     if (!error) {
       return NextResponse.redirect(`${origin}${fallback}`);
     }
@@ -51,6 +73,14 @@ export async function GET(
   // A GET carrying a token_hash is an automated fetch attempting to verify the
   // token. Never consume a token on GET — reject it.
   if (tokenHash) {
+    // TEMP-DIAG
+    diag("callback:GET-token-blocked", {
+      correlation: corr,
+      method: "GET",
+      lang,
+      result: "405-method-not-allowed",
+      status: 405,
+    });
     return new NextResponse("Method Not Allowed", {
       status: 405,
       headers: { Allow: "POST" },
@@ -58,6 +88,14 @@ export async function GET(
   }
 
   // No code and no token — nothing to do.
+  // TEMP-DIAG
+  diag("callback:GET-noop", {
+    correlation: corr,
+    method: "GET",
+    lang,
+    result: "no-code-no-token",
+    status: "redirect-invalid-link",
+  });
   return NextResponse.redirect(
     `${origin}/${lang}/auth/sign-in?error=invalid-link`
   );
@@ -68,6 +106,7 @@ export async function POST(
   { params }: { params: Promise<{ lang: string }> }
 ) {
   const { lang } = await params;
+  const corr = shortId();
   const origin =
     process.env.NEXT_PUBLIC_SITE_URL || request.nextUrl.origin;
 
@@ -77,9 +116,30 @@ export async function POST(
   const next = formData.get("next");
   const nextValue = typeof next === "string" ? next : null;
 
+  // TEMP-DIAG
+  diag("callback:POST", {
+    correlation: corr,
+    method: "POST",
+    lang,
+    type: type || undefined,
+    hasToken: !!tokenHash,
+    hasType: !!type,
+    next: nextValue,
+    ua: request.headers.get("user-agent") ?? undefined,
+  });
+
   const fallback = resolveDestination(nextValue, lang);
 
   if (!tokenHash || !type) {
+    // TEMP-DIAG
+    diag("callback:POST-missing-fields", {
+      correlation: corr,
+      method: "POST",
+      lang,
+      hasToken: !!tokenHash,
+      hasType: !!type,
+      result: "invalid-link",
+    });
     return NextResponse.redirect(
       `${origin}/${lang}/auth/sign-in?error=invalid-link`
     );
@@ -90,10 +150,38 @@ export async function POST(
     token_hash: tokenHash,
     type,
   });
+  // TEMP-DIAG
+  diag("verifyOtp", {
+    correlation: corr,
+    method: "POST",
+    type,
+    lang,
+    result: error ? "error" : "success",
+    name: error?.name,
+    status: error?.status,
+    message: error?.message,
+  });
   if (!error) {
+    // TEMP-DIAG
+    diag("callback:POST-success-redirect", {
+      correlation: corr,
+      method: "POST",
+      type,
+      lang,
+      next: fallback,
+      result: "redirect",
+    });
     return NextResponse.redirect(`${origin}${fallback}`);
   }
 
+  // TEMP-DIAG
+  diag("callback:POST-error-redirect", {
+    correlation: corr,
+    method: "POST",
+    type,
+    lang,
+    result: "invalid-link",
+  });
   return NextResponse.redirect(
     `${origin}/${lang}/auth/sign-in?error=invalid-link`
   );

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
+import { diag, shortId } from "../../../lib/auth/diag-log";
 
 /* Confirmation interstitial for the default Supabase email-template link shape:
 
@@ -20,11 +21,23 @@ import type { NextRequest } from "next/server";
    parsing, the next validation rules and the NEXT_PUBLIC_SITE_URL origin
    preference used by the callback. */
 export async function GET(request: NextRequest) {
+  const corr = shortId();
   const { searchParams } = new URL(request.url);
 
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type");
   const redirectTo = searchParams.get("redirect_to");
+
+  // TEMP-DIAG
+  diag("confirm", {
+    correlation: corr,
+    method: "GET",
+    pathname: "/auth/confirm",
+    type: type ?? undefined,
+    hasToken: !!tokenHash,
+    hasRedirect: !!redirectTo,
+    ua: request.headers.get("user-agent") ?? undefined,
+  });
 
   // Preserve the existing language detection: Arabic by default, English when
   // the realized destination path is /en/….
@@ -49,6 +62,16 @@ export async function GET(request: NextRequest) {
   }
 
   const html = interstitialHtml({ lang, tokenHash, type, next });
+
+  // TEMP-DIAG
+  diag("confirm:resolved", {
+    correlation: corr,
+    method: "GET",
+    type: type ?? undefined,
+    lang,
+    next,
+    result: "interstitial-served",
+  });
 
   return new NextResponse(html, {
     status: 200,

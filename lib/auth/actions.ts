@@ -11,6 +11,7 @@ import {
   isValidUsername,
   normalizeUsername,
 } from "./usernames";
+import { diag, shortId } from "./diag-log";
 
 export type AuthState = {
   error?: string;
@@ -183,6 +184,17 @@ export async function signUp(
       emailRedirectTo: `${origin}/${lang}/auth/callback?next=${encodeURIComponent(next)}`,
     },
   });
+  // TEMP-DIAG
+  diag("signUp", {
+    correlation: shortId(),
+    method: "action:signUp",
+    lang,
+    type: "email",
+    result: error ? "error" : data.session ? "session-immediate" : "confirm-required",
+    name: error?.name,
+    status: error?.status,
+    message: error?.message,
+  });
   if (error) {
     console.error(
       "[auth] supabase.auth.signUp failed:",
@@ -216,6 +228,17 @@ export async function forgotPassword(
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${origin}/${lang}/auth/callback?next=${encodeURIComponent(`/${lang}/auth/reset-password`)}`,
+  });
+  // TEMP-DIAG
+  diag("forgotPassword", {
+    correlation: shortId(),
+    method: "action:forgotPassword",
+    lang,
+    type: "recovery",
+    result: error ? "error" : "email-sent",
+    name: error?.name,
+    status: error?.status,
+    message: error?.message,
   });
   if (error) {
     const mapped = mapAuthError(error, errors);
