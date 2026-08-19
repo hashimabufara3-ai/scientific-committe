@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useActionState, useState, type FormEvent } from "react";
+import { useActionState, useEffect, useState, type FormEvent } from "react";
 import { signUp } from "../../lib/auth/actions";
 import { Field, PrimaryButton, TextInput } from "../contribute/primitives";
 import { AuthAlert } from "./auth-shell";
@@ -65,6 +65,12 @@ export function SignUpForm({
   const [state, formAction, pending] = useActionState(signUp, {});
   const [fieldError, setFieldError] = useState<string | null>(null);
   const { status, check } = useUsernameStatus();
+
+  useEffect(() => {
+    if (state.success) {
+      window.scrollTo({ top: 0, behavior: "auto" });
+    }
+  }, [state.success]);
 
   if (state.success) {
     return (
