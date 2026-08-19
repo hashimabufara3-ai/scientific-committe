@@ -6,21 +6,21 @@ import type { NextRequest } from "next/server";
    {{ .SiteURL }}/auth/confirm?token_hash=…&type=…&redirect_to=…
 
    The email template is configured in the Supabase Dashboard and cannot use a
-   localized prefix. This route renders a minimal HTML page instead of
-   redirecting automatically.
+   localized prefix. This route renders a minimal HTML page with a native form.
 
-   Email recovery/signup tokens are single-use. An automatic 302 here let a
-   link scanner or mail preview consume the token before the user clicked. This
-   page never verifies the token and never makes a request to the callback; the
-   callback URL is only constructed and navigated to when the user clicks the
-   Continue button, so scanners that fetch this URL alone cannot burn the token.
+   Email recovery/signup tokens are single-use. The page never verifies the
+   token itself and never navigates automatically: no <a href>, no meta
+   refresh, and no JavaScript. The token_hash exists only as a hidden form
+   input value — never inside a URL in the HTML — so a link scanner or mail
+   preview that fetches this page cannot discover or consume the token. The
+   token is only sent to the localized callback when the user physically
+   submits the POST form via the Continue button.
 
-   It preserves: token_hash, type, next, Arabic/English language detection and
-   the NEXT_PUBLIC_SITE_URL origin preference used by the callback. */
+   It preserves: token_hash, type, next, Arabic/English detection, redirect_to
+   parsing, the next validation rules and the NEXT_PUBLIC_SITE_URL origin
+   preference used by the callback. */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const { origin: requestOrigin } = request.nextUrl;
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || requestOrigin;
 
   const tokenHash = searchParams.get("token_hash");
   const type = searchParams.get("type");
@@ -48,12 +48,7 @@ export async function GET(request: NextRequest) {
     next = null;
   }
 
-  const cb = new URL(`${origin}/${lang}/auth/callback`);
-  if (tokenHash) cb.searchParams.set("token_hash", tokenHash);
-  if (type) cb.searchParams.set("type", type);
-  if (next) cb.searchParams.set("next", next);
-
-  const html = interstitialHtml({ lang, cb: cb.toString() });
+  const html = interstitialHtml({ lang, tokenHash, type, next });
 
   return new NextResponse(html, {
     status: 200,
@@ -63,17 +58,30 @@ export async function GET(request: NextRequest) {
       "X-Robots-Tag": "noindex, nofollow",
       "Referrer-Policy": "no-referrer",
       "Content-Security-Policy":
-        "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'none'",
+        "default-src 'none'; style-src 'unsafe-inline'; img-src 'none'; base-uri 'none'; form-action 'self'",
     },
   });
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 function interstitialHtml({
   lang,
-  cb,
+  tokenHash,
+  type,
+  next,
 }: {
   lang: string;
-  cb: string;
+  tokenHash: string | null;
+  type: string | null;
+  next: string | null;
 }): string {
   const dir = lang === "en" ? "ltr" : "rtl";
   const isEn = lang === "en";
@@ -84,14 +92,10 @@ function interstitialHtml({
     ? "A link was sent to your email to confirm an action on your account. Click the button below to continue. If you did not request this, you can close this page."
     : "أُرسل رابط إلى بريدك الإلكتروني لتأكيد إجراء على حسابك. اضغط على الزر أدناه للمتابعة. إذا لم تكن قد طلبت ذلك، يمكنك إغلاق هذه الصفحة.";
   const label = isEn ? "Continue" : "متابعة";
-  const noscript = isEn
-    ? "JavaScript is required to continue. Please enable JavaScript and click the button again."
-    : "يجب تفعيل جافاسكربت للمتابعة. الرجاء تفعيله ثم الضغط على الزر مرة أخرى.";
 
-  // Only the button click handler knows the callback URL. It is not present as
-  // an <a href>, <form action> or <meta refresh>, so automated fetchers of this
-  // page cannot reach the callback (and cannot consume the single-use token).
-  const goTo = JSON.stringify(cb);
+  const hiddenToken = tokenHash ? `<input type="hidden" name="token_hash" value="${escapeHtml(tokenHash)}" />` : "";
+  const hiddenType = type ? `<input type="hidden" name="type" value="${escapeHtml(type)}" />` : "";
+  const hiddenNext = next ? `<input type="hidden" name="next" value="${escapeHtml(next)}" />` : "";
 
   return `<!doctype html>
 <html lang="${isEn ? "en" : "ar"}" dir="${dir}">
@@ -115,24 +119,19 @@ function interstitialHtml({
                border: 0; border-radius: 0.5rem; cursor: pointer;
                background: #0f766e; color: #fff; }
       button:focus-visible { outline: 3px solid #5eead4; outline-offset: 2px; }
-      .sm { font-size: 0.8rem; color: #64748b; margin-top: 1.25rem; }
     </style>
   </head>
   <body>
     <main>
       <h1>${heading}</h1>
       <p>${body}</p>
-      <button type="button" id="continue-btn">${label}</button>
-      <noscript><p class="sm">${noscript}</p></noscript>
+      <form method="POST" action="/${escapeHtml(lang)}/auth/callback">
+        ${hiddenToken}
+        ${hiddenType}
+        ${hiddenNext}
+        <button type="submit">${label}</button>
+      </form>
     </main>
-    <script>
-      (function () {
-        var target = ${goTo};
-        document.getElementById("continue-btn").addEventListener("click", function () {
-          window.location.assign(target);
-        });
-      })();
-    </script>
   </body>
 </html>`;
 }
