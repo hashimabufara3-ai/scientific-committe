@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { useActionState } from "react";
 import { signIn } from "../../lib/auth/actions";
 import { Field, PrimaryButton, TextInput } from "../contribute/primitives";
@@ -21,6 +22,12 @@ export function SignInForm({
   resetSuccess: boolean;
 }) {
   const [state, formAction, pending] = useActionState(signIn, {});
+
+  useEffect(() => {
+    if (state.success && state.value) {
+      window.location.replace(state.value);
+    }
+  }, [state]);
 
   return (
     <div className="space-y-6">

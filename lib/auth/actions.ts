@@ -122,7 +122,7 @@ export async function signIn(
   const { error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) return { error: mapAuthError(error, errors) };
 
-  redirect(next);
+  return { success: true, value: next };
 }
 
 export async function signUp(
