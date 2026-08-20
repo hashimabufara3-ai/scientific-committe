@@ -11,6 +11,8 @@ import {
   isValidUsername,
   normalizeUsername,
 } from "./usernames";
+import { getServerActionIP } from "../security/ip";
+import { checkRateLimit, emailKey, LIMITERS } from "../security/rate-limit";
 import { diag, shortId } from "./diag-log";
 
 export type AuthState = {
@@ -120,6 +122,21 @@ export async function signIn(
   if (!isValidEmail(email)) return { error: errors.invalidEmail };
   if (!password) return { error: errors.required };
 
+  /* Rate limit: 5 attempts / 15 min per IP AND per email.
+     When CF-Connecting-IP is absent (direct Render access / local dev) the IP
+     check is skipped — no shared bucket, no spoofing. The email check still
+     runs and protects against cross-IP brute-force. */
+  const ip = await getServerActionIP();
+  const [ipOk, emailOk] = await Promise.all([
+    ip
+      ? checkRateLimit(LIMITERS.signInIp, ip)
+      : ({ success: true } as const),
+    checkRateLimit(LIMITERS.signInEmail, emailKey(email)),
+  ]);
+  if (!ipOk.success || !emailOk.success) {
+    return { error: errors.rateLimited };
+  }
+
   const next = sanitizeNext(readString(formData, "next"), lang);
 
   const supabase = await createClient();
@@ -152,6 +169,14 @@ export async function signUp(
   if (password !== confirmPassword)
     return { error: errors.passwordsMismatch };
 
+  /* Rate limit: 3 attempts / hour per IP.
+     When CF-Connecting-IP is absent, skip — no shared bucket. */
+  const ip = await getServerActionIP();
+  if (ip) {
+    const { success: ipOk } = await checkRateLimit(LIMITERS.signUpIp, ip);
+    if (!ipOk) return { error: errors.rateLimited };
+  }
+
   const next = sanitizeNext(
     readString(formData, "next") || `/${lang}/account`,
     lang
@@ -165,8 +190,7 @@ export async function signUp(
   const { data: usernameAvailable, error: availabilityError } =
     await supabase.rpc("username_available", {
       p_username: username,
-    });
-  if (availabilityError) {
+    });  if (availabilityError) {
     console.error(
       "[auth] username_available() RPC failed:",
       availabilityError.code,
@@ -223,6 +247,20 @@ export async function forgotPassword(
   const email = readString(formData, "email").trim();
   if (!isValidEmail(email)) return { error: errors.invalidEmail };
 
+  /* Rate limit: 3 requests / hour per IP AND per email.
+     When CF-Connecting-IP is absent, skip the IP check — no shared bucket.
+     The email check still runs and prevents cross-IP email bombing. */
+  const ip = await getServerActionIP();
+  const [ipOk, emailOk] = await Promise.all([
+    ip
+      ? checkRateLimit(LIMITERS.forgotPasswordIp, ip)
+      : ({ success: true } as const),
+    checkRateLimit(LIMITERS.forgotPasswordEmail, emailKey(email)),
+  ]);
+  if (!ipOk.success || !emailOk.success) {
+    return { error: errors.rateLimited };
+  }
+
   const origin = await getOrigin();
 
   const supabase = await createClient();
@@ -273,6 +311,19 @@ export async function updatePassword(
     return { error: errors.passwordsMismatch };
 
   const supabase = await createClient();
+
+  /* Rate limit: 5 attempts / hour per authenticated user */
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (user) {
+    const { success: allowed } = await checkRateLimit(
+      LIMITERS.updatePassword,
+      user.id
+    );
+    if (!allowed) return { error: errors.rateLimited };
+  }
+
   const { error } = await supabase.auth.updateUser({ password });
   if (error) return { error: mapAuthError(error, errors) };
 
@@ -322,6 +373,13 @@ export async function updateUsername(
   } = await supabase.auth.getUser();
   if (!user) redirect(`/${lang}/auth/sign-in`);
 
+  /* Rate limit: 5 attempts / hour per authenticated user */
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.updateUsername,
+    user.id
+  );
+  if (!allowed) return { error: errors.rateLimited };
+
   const { data: profile } = await supabase
     .from("profiles")
     .select("username")
@@ -342,4 +400,95 @@ export async function updateUsername(
 
   revalidatePath(`/${lang}/account`);
   return { success: true, value: username };
+}
+
+/* Rate-limited wrapper for the username_available() RPC. The client calls
+   this instead of hitting Supabase directly, so we can enforce the 20/min
+   per-IP limit on username enumeration. */
+export type UsernameCheckState = {
+  available?: boolean;
+  error?: string;
+};
+
+export async function checkUsernameAvailability(
+  _prev: UsernameCheckState,
+  formData: FormData
+): Promise<UsernameCheckState> {
+  const username = normalizeUsername(readString(formData, "username"));
+  if (!isValidUsername(username)) return { available: false };
+  if (isReservedUsername(username)) return { available: false };
+
+  /* Rate limit: 20 requests / minute per IP.
+     When CF-Connecting-IP is absent, skip — no shared bucket. */
+  const ip = await getServerActionIP();
+  if (ip) {
+    const { success: allowed } = await checkRateLimit(
+      LIMITERS.usernameAvailable,
+      ip
+    );
+    if (!allowed) return { error: "rateLimited" };
+  }
+
+  const supabase = await createClient();
+  const { data, error } = await supabase.rpc("username_available", {
+    p_username: username,
+  });
+  if (error) {
+    console.error("[auth] username_available() RPC failed:", error.code, error.message);
+    return { available: false };
+  }
+  return { available: data !== false };
+}
+
+/* Force-change password action. Used when must_change_password is true.
+   Unlike the standard updatePassword (which signs out), this keeps the
+   session active and clears the must_change_password flag. */
+export async function forceChangePassword(
+  _prev: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const lang = readLang(formData);
+  const dict = await getDictionary(lang);
+  const errors = dict.auth.errors;
+
+  const password = readString(formData, "password");
+  const confirmPassword = readString(formData, "confirmPassword");
+
+  if (password.length < MIN_PASSWORD_LENGTH)
+    return { error: errors.passwordTooShort };
+  if (password !== confirmPassword)
+    return { error: errors.passwordsMismatch };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect(`/${lang}/auth/sign-in`);
+
+  /* Rate limit: 5 attempts / hour per authenticated user */
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.updatePassword,
+    user.id
+  );
+  if (!allowed) return { error: errors.rateLimited };
+
+  /* Update password */
+  const { error: pwError } = await supabase.auth.updateUser({ password });
+  if (pwError) return { error: mapAuthError(pwError, errors) };
+
+  /* Clear must_change_password flag via SECURITY DEFINER function.
+     The RLS "update own profile" policy restricts column changes, so we
+     use the function which bypasses RLS. */
+  const { error: mcpError } = await supabase.rpc("clear_must_change_password");
+  if (mcpError) {
+    console.error(
+      "[auth] clear_must_change_password failed:",
+      mcpError.code,
+      mcpError.message
+    );
+    /* Non-fatal: the password was changed. The proxy will continue to
+       redirect, but the user can sign in with the new password. */
+  }
+
+  return { success: true, value: `/${lang}` };
 }

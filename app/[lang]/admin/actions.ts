@@ -1,11 +1,16 @@
 "use server";
 
+import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDictionary } from "../dictionaries";
 import { getSessionRole } from "../../../lib/auth/authorize";
 import { canAssign, isRole, type Role } from "../../../lib/auth/roles";
-import { createClient } from "../../../lib/auth/supabase-server";
+import {
+  createAdminClient,
+  createClient,
+} from "../../../lib/auth/supabase-server";
+import { checkRateLimit, LIMITERS } from "../../../lib/security/rate-limit";
 
 /* Admin mutations.
 
@@ -65,6 +70,13 @@ export async function setRoleAction(
   if (!isRole(newRoleRaw)) return { ok: false, errorKey: "notAllowed" };
   const newRole = newRoleRaw as Role;
 
+  /* Rate limit: 30 requests / minute per authenticated admin */
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.adminAction,
+    session.user.id
+  );
+  if (!allowed) return { ok: false, errorKey: "notAllowed" };
+
   if (session.role !== "admin" && session.role !== "owner") {
     return { ok: false, errorKey: "notAllowed" };
   }
@@ -122,6 +134,14 @@ export async function transferOwnershipAction(
   if (session.role !== "owner") {
     return { ok: false, errorKey: "transferOnlyOwner" };
   }
+
+  /* Rate limit: 30 requests / minute per authenticated owner */
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.adminAction,
+    session.user.id
+  );
+  if (!allowed) return { ok: false, errorKey: "notAllowed" };
+
   if (targetId === session.user.id) {
     return { ok: false, errorKey: "transferSelf" };
   }
@@ -203,9 +223,16 @@ export async function createCommitteeMemberAction(
     return { ok: false, errorKey: "notAllowed" };
   }
 
+  /* Rate limit: 30 requests / minute per authenticated admin */
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.adminAction,
+    session.user.id
+  );
+  if (!allowed) return { ok: false, errorKey: "notAllowed" };
+
   const supabase = await createClient();
   const userIdRaw = String(formData.get("userId") ?? "").trim();
-  const { data: newId, error } = await supabase.rpc(
+  const { error } = await supabase.rpc(
     "admin_create_committee_member",
     {
       p_user_id: userIdRaw || null,
@@ -226,7 +253,270 @@ export async function createCommitteeMemberAction(
 
   revalidatePath(`/${lang}/admin`);
   revalidatePath(`/${lang}/about`);
-  return { ok: true, id: newId as string };
+  return { ok: true };
+}
+
+/* =========================================================================
+   Committee Member + Account Creation
+   ========================================================================= */
+
+export type CommitteeMemberWithAccountErrorKey =
+  | CommitteeMemberErrorKey
+  | "accountCreationFailed"
+  | "duplicateEmail";
+
+export type CommitteeMemberWithAccountActionResult = {
+  ok: boolean;
+  errorKey?: CommitteeMemberWithAccountErrorKey;
+  id?: string;
+  credentials?: {
+    email: string;
+    username: string;
+    temporaryPassword: string;
+  };
+};
+
+/* Generate a cryptographically strong random password: 16 chars,
+   uppercase + lowercase + digits. Not derived from name or any
+   predictable value. */
+function generateTemporaryPassword(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = randomBytes(16);
+  return Array.from(bytes, (b) => chars[b % chars.length]).join("");
+}
+
+/* Replicate the slug_username() SQL function logic in TypeScript.
+   Generates a deterministic ASCII-safe slug from a name.
+   Used to predict the username that handle_new_user() will create. */
+function slugUsername(name: string): string {
+  let v = name.trim().toLowerCase();
+  if (!v) return "member";
+
+  v = v.replace(/\s+/g, "_");
+  v = v.replace(/[^a-z0-9._]/g, "");
+  v = v.replace(/[._]{2,}/g, "_");
+  v = v.replace(/^[._]+|[._]+$/g, "");
+
+  const core = v.replace(/[._]/g, "");
+  if (!core || core.length < 3) return "member";
+
+  if (v.length > 17) {
+    v = v.slice(0, 17);
+    v = v.replace(/[._]+$/, "");
+  }
+
+  return v;
+}
+
+/* Create a new committee member WITH a website account.
+   This action:
+   1. Creates a Supabase Auth user (via Admin API, email_confirm: true)
+   2. The handle_new_user() trigger creates the profile
+   3. Sets must_change_password = true
+   4. Creates the committee member record (linked to the new user)
+   5. Stores father_name in committee_member_private
+   6. Logs the audit event
+   7. Returns credentials ONCE (never stored in DB)
+
+   Compensation: If any step after auth user creation fails, the auth
+   user is deleted to prevent orphaned accounts. */
+export async function createCommitteeMemberWithAccountAction(
+  _prev: CommitteeMemberWithAccountActionResult,
+  formData: FormData
+): Promise<CommitteeMemberWithAccountActionResult> {
+  const lang = readLang(formData);
+
+  const session = await getSessionRole();
+  if (!session) redirect(`/${lang}/auth/sign-in`);
+  if (session.role !== "admin" && session.role !== "owner") {
+    return { ok: false, errorKey: "notAllowed" };
+  }
+
+  /* Rate limit: 30 requests / minute per authenticated admin */
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.adminAction,
+    session.user.id
+  );
+  if (!allowed) return { ok: false, errorKey: "notAllowed" };
+
+  const nameEn = String(formData.get("nameEn") ?? "").trim();
+  const nameAr = String(formData.get("nameAr") ?? "").trim();
+  const majorAr = String(formData.get("majorAr") ?? "");
+  const majorEn = String(formData.get("majorEn") ?? "");
+  const roleAr = String(formData.get("roleAr") ?? "");
+  const roleEn = String(formData.get("roleEn") ?? "");
+  const gender = String(formData.get("gender") ?? "") as "male" | "female";
+  const sortOrder = Number(formData.get("sortOrder") ?? 0);
+  const isActive = formData.get("isActive") === "on";
+  const fatherName = String(formData.get("fatherName") ?? "").trim();
+
+  /* Validate required fields (same checks as admin_create_committee_member) */
+  if (!nameAr) return { ok: false, errorKey: "validation" };
+  if (!nameEn) return { ok: false, errorKey: "validation" };
+  if (!majorAr) return { ok: false, errorKey: "validation" };
+  if (!majorEn) return { ok: false, errorKey: "validation" };
+  if (!roleAr) return { ok: false, errorKey: "validation" };
+  if (!roleEn) return { ok: false, errorKey: "validation" };
+  if (gender !== "male" && gender !== "female")
+    return { ok: false, errorKey: "validation" };
+
+  /* Generate deterministic username and email.
+     The username will be created by handle_new_user() trigger; we predict
+     it here for the email and to return to the admin. The trigger handles
+     collisions deterministically. */
+  const baseSlug = slugUsername(nameEn);
+  const email = `${baseSlug}@committee.internal`;
+  const temporaryPassword = generateTemporaryPassword();
+
+  const adminSupabase = createAdminClient();
+  let authUserId: string | null = null;
+
+  try {
+    /* Step 1: Create auth user via Admin API.
+       email_confirm: true → no confirmation email sent.
+       handle_new_user() trigger creates the profiles row. */
+    const { data: authUser, error: authError } =
+      await adminSupabase.auth.admin.createUser({
+        email,
+        password: temporaryPassword,
+        email_confirm: true,
+        user_metadata: {
+          full_name: nameEn,
+        },
+      });
+
+    if (authError || !authUser?.user) {
+      console.error(
+        "[admin] auth.admin.createUser failed:",
+        authError?.code,
+        authError?.message
+      );
+      return { ok: false, errorKey: "accountCreationFailed" };
+    }
+
+    authUserId = authUser.user.id;
+
+    /* Step 2: Set must_change_password on the new profile.
+       The trigger already created the profile row. */
+    const { error: mcpError } = await adminSupabase.rpc(
+      "set_must_change_password",
+      {
+        p_user_id: authUserId,
+        p_must_change: true,
+      }
+    );
+
+    if (mcpError) {
+      console.error(
+        "[admin] set_must_change_password failed:",
+        mcpError.code,
+        mcpError.message
+      );
+      /* Compensating: delete the auth user we just created. */
+      await adminSupabase.auth.admin.deleteUser(authUserId);
+      return { ok: false, errorKey: "accountCreationFailed" };
+    }
+
+    /* Step 3: Create committee member record, linked to the new user. */
+    const supabase = await createClient();
+    const { data: memberId, error: memberError } = await supabase.rpc(
+      "admin_create_committee_member",
+      {
+        p_user_id: authUserId,
+        p_name_ar: nameAr,
+        p_name_en: nameEn,
+        p_major_ar: majorAr,
+        p_major_en: majorEn,
+        p_role_ar: roleAr,
+        p_role_en: roleEn,
+        p_gender: gender,
+        p_sort_order: sortOrder,
+        p_is_active: isActive,
+      }
+    );
+
+    if (memberError || !memberId) {
+      console.error(
+        "[admin] admin_create_committee_member failed:",
+        memberError?.message
+      );
+      /* Compensating: delete the auth user. */
+      await adminSupabase.auth.admin.deleteUser(authUserId);
+      return {
+        ok: false,
+        errorKey: mapCommitteeRpcError(memberError?.message ?? ""),
+      };
+    }
+
+    /* Step 4: Store father_name in committee_member_private. */
+    if (fatherName) {
+      const { error: privateError } = await supabase.rpc(
+        "admin_create_committee_member_private",
+        {
+          p_committee_member_id: memberId as string,
+          p_father_name: fatherName,
+        }
+      );
+
+      if (privateError) {
+        console.error(
+          "[admin] admin_create_committee_member_private failed:",
+          privateError.message
+        );
+        /* Compensating: delete member + auth user. */
+        await supabase.rpc("admin_delete_committee_member", {
+          p_id: memberId as string,
+        });
+        await adminSupabase.auth.admin.deleteUser(authUserId);
+        return { ok: false, errorKey: "accountCreationFailed" };
+      }
+    }
+
+    /* Step 5: Log the audit event.
+       Never log passwords or credentials. Only log member_id and auth_user_id. */
+    const { error: auditError } = await supabase.rpc("log_audit_event", {
+      p_action: "committee_member_account_created",
+      p_target_type: "committee_member",
+      p_target_id: memberId as string,
+      p_details: {
+        auth_user_id: authUserId,
+        username: baseSlug,
+      } as Record<string, unknown>,
+    });
+
+    if (auditError) {
+      console.error("[admin] log_audit_event failed:", auditError.message);
+      /* Audit failure is non-fatal — the member was created successfully. */
+    }
+
+    revalidatePath(`/${lang}/admin`);
+    revalidatePath(`/${lang}/about`);
+
+    return {
+      ok: true,
+      id: memberId as string,
+      credentials: {
+        email,
+        username: baseSlug,
+        temporaryPassword,
+      },
+    };
+  } catch (err) {
+    console.error("[admin] createCommitteeMemberWithAccountAction error:", err);
+
+    /* Catch-all compensation: if we created an auth user but something
+       unexpected failed, try to clean up. */
+    if (authUserId) {
+      try {
+        await adminSupabase.auth.admin.deleteUser(authUserId);
+      } catch {
+        /* Best-effort cleanup. If this fails, the admin must manually
+           remove the orphaned auth user from the Supabase dashboard. */
+      }
+    }
+
+    return { ok: false, errorKey: "accountCreationFailed" };
+  }
 }
 
 /* Update an existing committee member. */
@@ -242,6 +532,13 @@ export async function updateCommitteeMemberAction(
   if (session.role !== "admin" && session.role !== "owner") {
     return { ok: false, errorKey: "notAllowed" };
   }
+
+  /* Rate limit: 30 requests / minute per authenticated admin */
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.adminAction,
+    session.user.id
+  );
+  if (!allowed) return { ok: false, errorKey: "notAllowed" };
 
   const supabase = await createClient();
   const userIdRaw = String(formData.get("userId") ?? "").trim();
@@ -280,6 +577,13 @@ export async function deleteCommitteeMemberAction(
   if (session.role !== "admin" && session.role !== "owner") {
     return { ok: false, errorKey: "notAllowed" };
   }
+
+  /* Rate limit: 30 requests / minute per authenticated admin */
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.adminAction,
+    session.user.id
+  );
+  if (!allowed) return { ok: false, errorKey: "notAllowed" };
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("admin_delete_committee_member", {
