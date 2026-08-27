@@ -13,7 +13,6 @@ import {
 } from "./usernames";
 import { getServerActionIP } from "../security/ip";
 import { checkRateLimit, emailKey, LIMITERS } from "../security/rate-limit";
-import { diag, shortId } from "./diag-log";
 
 export type AuthState = {
   error?: string;
@@ -116,13 +115,34 @@ export async function signIn(
   const dict = await getDictionary(lang);
   const errors = dict.auth.errors;
 
-  const email = readString(formData, "email").trim();
+  const identifier = readString(formData, "email").trim();
   const password = readString(formData, "password");
 
-  if (!isValidEmail(email)) return { error: errors.invalidEmail };
+  if (!identifier) return { error: errors.required };
   if (!password) return { error: errors.required };
 
-  /* Rate limit: 5 attempts / 15 min per IP AND per email.
+  const supabase = await createClient();
+
+  /* Resolve the identifier to an Auth email.
+     If it contains "@", treat as email directly.
+     Otherwise, resolve username → email via SECURITY DEFINER RPC. */
+  let authEmail: string;
+  const isEmail = identifier.includes("@");
+
+  if (isEmail) {
+    authEmail = identifier.toLowerCase();
+  } else {
+    const { data: resolvedEmail } = await supabase.rpc("resolve_auth_email", {
+      p_identifier: identifier,
+    });
+    if (!resolvedEmail) {
+      /* Generic failure — do not reveal whether the username exists. */
+      return { error: errors.invalidCredentials };
+    }
+    authEmail = resolvedEmail;
+  }
+
+  /* Rate limit: 5 attempts / 15 min per IP AND per resolved email.
      When CF-Connecting-IP is absent (direct Render access / local dev) the IP
      check is skipped — no shared bucket, no spoofing. The email check still
      runs and protects against cross-IP brute-force. */
@@ -131,7 +151,7 @@ export async function signIn(
     ip
       ? checkRateLimit(LIMITERS.signInIp, ip)
       : ({ success: true } as const),
-    checkRateLimit(LIMITERS.signInEmail, emailKey(email)),
+    checkRateLimit(LIMITERS.signInEmail, emailKey(authEmail)),
   ]);
   if (!ipOk.success || !emailOk.success) {
     return { error: errors.rateLimited };
@@ -139,8 +159,10 @@ export async function signIn(
 
   const next = sanitizeNext(readString(formData, "next"), lang);
 
-  const supabase = await createClient();
-  const { error } = await supabase.auth.signInWithPassword({ email, password });
+  const { error } = await supabase.auth.signInWithPassword({
+    email: authEmail,
+    password,
+  });
   if (error) return { error: mapAuthError(error, errors) };
 
   return { success: true, value: next };
@@ -208,17 +230,6 @@ export async function signUp(
       emailRedirectTo: `${origin}/${lang}/auth/callback?next=${encodeURIComponent(next)}`,
     },
   });
-  // TEMP-DIAG
-  diag("signUp", {
-    correlation: shortId(),
-    method: "action:signUp",
-    lang,
-    type: "email",
-    result: error ? "error" : data.session ? "session-immediate" : "confirm-required",
-    name: error?.name,
-    status: error?.status,
-    message: error?.message,
-  });
   if (error) {
     console.error(
       "[auth] supabase.auth.signUp failed:",
@@ -266,17 +277,6 @@ export async function forgotPassword(
   const supabase = await createClient();
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${origin}/${lang}/auth/callback?next=${encodeURIComponent(`/${lang}/auth/reset-password`)}`,
-  });
-  // TEMP-DIAG
-  diag("forgotPassword", {
-    correlation: shortId(),
-    method: "action:forgotPassword",
-    lang,
-    type: "recovery",
-    result: error ? "error" : "email-sent",
-    name: error?.name,
-    status: error?.status,
-    message: error?.message,
   });
   if (error) {
     const mapped = mapAuthError(error, errors);
@@ -354,7 +354,7 @@ function mapUsernameUpdateError(
    keeps role immutable, so this can never touch another member or change a
    role. Uniqueness is enforced by the case-insensitive database index; the
    RPC pre-check and the reserved list here are advisory/UX plus a second
-   server-side gate. */
+   server-side gate. Committee member usernames are immutable. */
 export async function updateUsername(
   _prev: AuthState,
   formData: FormData
@@ -372,6 +372,16 @@ export async function updateUsername(
     data: { user },
   } = await supabase.auth.getUser();
   if (!user) redirect(`/${lang}/auth/sign-in`);
+
+  /* Committee member usernames are permanent. Reject any change attempt. */
+  const { data: memberRow } = await supabase
+    .from("committee_members")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  if (memberRow) {
+    return { error: errors.usernameImmutable };
+  }
 
   /* Rate limit: 5 attempts / hour per authenticated user */
   const { success: allowed } = await checkRateLimit(

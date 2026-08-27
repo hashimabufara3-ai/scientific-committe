@@ -46,13 +46,13 @@ export function SignInForm({
           name="next"
           value={next ?? `/${lang}`}
         />
-        <Field label={dict.signIn.email} htmlFor="email" required>
+        <Field label={dict.signIn.identifier} htmlFor="email" required>
           <TextInput
             id="email"
             name="email"
-            type="email"
-            autoComplete="email"
-            placeholder={dict.signIn.emailPlaceholder}
+            type="text"
+            autoComplete="username"
+            placeholder={dict.signIn.identifierPlaceholder}
           />
         </Field>
         <Field label={dict.signIn.password} htmlFor="password" required>

@@ -287,21 +287,22 @@ function generateTemporaryPassword(): string {
 
 /* Replicate the slug_username() SQL function logic in TypeScript.
    Generates a deterministic ASCII-safe slug from a name.
-   Used to predict the username that handle_new_user() will create. */
+   Used to predict the username that handle_new_user() will create.
+   Must stay in sync with supabase/migrations/*_slug_dot_and_resolve_email.sql */
 function slugUsername(name: string): string {
   let v = name.trim().toLowerCase();
   if (!v) return "member";
 
-  v = v.replace(/\s+/g, "_");
+  v = v.replace(/\s+/g, ".");
   v = v.replace(/[^a-z0-9._]/g, "");
-  v = v.replace(/[._]{2,}/g, "_");
+  v = v.replace(/[._]{2,}/g, ".");
   v = v.replace(/^[._]+|[._]+$/g, "");
 
   const core = v.replace(/[._]/g, "");
   if (!core || core.length < 3) return "member";
 
-  if (v.length > 17) {
-    v = v.slice(0, 17);
+  if (v.length > 15) {
+    v = v.slice(0, 15);
     v = v.replace(/[._]+$/, "");
   }
 
@@ -365,9 +366,9 @@ export async function createCommitteeMemberWithAccountAction(
      it here for the email and to return to the admin. The trigger handles
      collisions deterministically. */
   const baseSlug = slugUsername(nameEn);
-  const email = `${baseSlug}@committee.internal`;
+  const predictedEmail = `${baseSlug}@ptuksc.com`;
   const temporaryPassword = generateTemporaryPassword();
-
+const supabase = await createClient();
   const adminSupabase = createAdminClient();
   let authUserId: string | null = null;
 
@@ -377,7 +378,7 @@ export async function createCommitteeMemberWithAccountAction(
        handle_new_user() trigger creates the profiles row. */
     const { data: authUser, error: authError } =
       await adminSupabase.auth.admin.createUser({
-        email,
+        email: predictedEmail,
         password: temporaryPassword,
         email_confirm: true,
         user_metadata: {
@@ -396,9 +397,37 @@ export async function createCommitteeMemberWithAccountAction(
 
     authUserId = authUser.user.id;
 
+    /* Step 1b: Read back the ACTUAL username and email assigned by the
+       database trigger. The trigger may have chosen a different username
+       if a collision occurred (e.g. hashim.abufara → hashim.abufara.2).
+       Never return predicted credentials — always the actual ones. */
+    const { data: actualProfile, error: profileReadError } =
+      await adminSupabase
+        .from("profiles")
+        .select("username, email")
+        .eq("id", authUserId)
+        .single();
+
+    if (
+      profileReadError ||
+      !actualProfile?.username ||
+      !actualProfile.email
+    ) {
+      console.error(
+        "[admin] Failed to read back profile after auth user creation:",
+        profileReadError?.code,
+        profileReadError?.message
+      );
+      await adminSupabase.auth.admin.deleteUser(authUserId);
+      return { ok: false, errorKey: "accountCreationFailed" };
+    }
+
+    const actualUsername = actualProfile.username;
+    const actualEmail: string = actualProfile.email;
+
     /* Step 2: Set must_change_password on the new profile.
        The trigger already created the profile row. */
-    const { error: mcpError } = await adminSupabase.rpc(
+    const { error: mcpError } = await supabase.rpc(
       "set_must_change_password",
       {
         p_user_id: authUserId,
@@ -418,7 +447,7 @@ export async function createCommitteeMemberWithAccountAction(
     }
 
     /* Step 3: Create committee member record, linked to the new user. */
-    const supabase = await createClient();
+  
     const { data: memberId, error: memberError } = await supabase.rpc(
       "admin_create_committee_member",
       {
@@ -480,7 +509,7 @@ export async function createCommitteeMemberWithAccountAction(
       p_target_id: memberId as string,
       p_details: {
         auth_user_id: authUserId,
-        username: baseSlug,
+        username: actualUsername,
       } as Record<string, unknown>,
     });
 
@@ -496,8 +525,8 @@ export async function createCommitteeMemberWithAccountAction(
       ok: true,
       id: memberId as string,
       credentials: {
-        email,
-        username: baseSlug,
+        email: actualEmail,
+        username: actualUsername,
         temporaryPassword,
       },
     };

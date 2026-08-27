@@ -2,10 +2,9 @@
 
 import Link from "next/link";
 import { useActionState, useEffect, useState, type FormEvent } from "react";
-import { signUp } from "../../lib/auth/actions";
+import { signUp, checkUsernameAvailability } from "../../lib/auth/actions";
 import { Field, PrimaryButton, TextInput } from "../contribute/primitives";
 import { AuthAlert } from "./auth-shell";
-import { createClient } from "../../lib/auth/supabase-browser";
 import {
   isReservedUsername,
   isValidUsername,
@@ -20,9 +19,9 @@ type UsernameStatus =
   | "taken"
   | "reserved";
 
-/* Live, debounced availability check against username_available(). Advisory
-   only — the database's case-insensitive unique index is the final authority
-   and the server action re-checks before submitting. */
+/* Live, debounced availability check via rate-limited server action.
+   Advisory only — the database's case-insensitive unique index is the final
+   authority and the server action re-checks before submitting. */
 function useUsernameStatus() {
   const [status, setStatus] = useState<UsernameStatus>("idle");
   const [timer, setTimer] = useState<ReturnType<typeof setTimeout> | null>(
@@ -36,18 +35,22 @@ function useUsernameStatus() {
       setStatus("idle");
       return;
     }
-    // Reserved names are rejected locally; they never reach the RPC.
     if (isReservedUsername(username)) {
       setStatus("reserved");
       return;
     }
     setStatus("checking");
     const next = setTimeout(async () => {
-      const supabase = createClient();
-      const { data } = await supabase.rpc("username_available", {
-        p_username: username,
-      });
-      setStatus(data === false ? "taken" : "available");
+      const fd = new FormData();
+      fd.set("username", username);
+      const result = await checkUsernameAvailability({}, fd);
+      if (result.available) {
+        setStatus("available");
+      } else if (result.error === "rateLimited") {
+        setStatus("idle");
+      } else {
+        setStatus("taken");
+      }
     }, 350);
     setTimer(next);
   }

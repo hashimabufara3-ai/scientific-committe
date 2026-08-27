@@ -5,9 +5,11 @@ import { useReducedMotion } from "motion/react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import {
   createCommitteeMemberAction,
+  createCommitteeMemberWithAccountAction,
   updateCommitteeMemberAction,
   deleteCommitteeMemberAction,
   type CommitteeMemberActionResult,
+  type CommitteeMemberWithAccountActionResult,
 } from "@/app/[lang]/admin/actions";
 import {
   Panel,
@@ -66,26 +68,48 @@ function MemberForm({
   savedScrollY: { current: number };
 }) {
   const isEdit = !!member;
-  const [state, formAction, pending] = useActionState<CommitteeMemberActionResult, FormData>(
-    isEdit ? updateCommitteeMemberAction : createCommitteeMemberAction,
+  const [createAccount, setCreateAccount] = useState(false);
+
+  /* Use the with-account action when creating a new member with account,
+     otherwise use the standard create/edit actions.
+     All three actions accept FormData and return compatible results;
+     the _prev parameter is never used, so the type variance is safe. */
+  const selectedAction = isEdit
+    ? updateCommitteeMemberAction
+    : createAccount
+      ? createCommitteeMemberWithAccountAction
+      : createCommitteeMemberAction;
+  const [state, formAction, pending] = useActionState(
+    selectedAction as (
+      state:
+        | CommitteeMemberActionResult
+        | CommitteeMemberWithAccountActionResult,
+      formData: FormData
+    ) =>
+      | CommitteeMemberActionResult
+      | CommitteeMemberWithAccountActionResult
+      | Promise<CommitteeMemberActionResult | CommitteeMemberWithAccountActionResult>,
     INITIAL_STATE
   );
 
-  /* Close the form on success. The server action's revalidatePath already
-     refreshes the data; router.refresh() is not needed. Restore the scroll
-     position the user had before the edit form opened. */
+  /* Close the form on success — unless credentials were returned (account
+     creation), in which case we keep the form open so the admin can copy
+     the email / username / temporary password. The admin must explicitly
+     click "Done" to dismiss the credentials panel. */
+  const hasCredentials =
+    "credentials" in state && !!state.credentials;
   const first = useRef(true);
   useEffect(() => {
     if (first.current) {
       first.current = false;
       return;
     }
-    if (state.ok) {
+    if (state.ok && !hasCredentials) {
       const y = savedScrollY.current;
       requestAnimationFrame(() => window.scrollTo(0, y));
       onDone();
     }
-  }, [state.ok, onDone, savedScrollY]);
+  }, [state.ok, hasCredentials, onDone, savedScrollY]);
 
   /* errorKey is only set after a failed action, so the pristine initial
      state ({ ok: false }) shows no error. */
@@ -263,26 +287,122 @@ function MemberForm({
           </div>
         </div>
 
-        {/* Website user selector */}
-        <Field label={t.websiteUser} htmlFor="cm-user-id">
-          <select
-            id="cm-user-id"
-            name="userId"
-            defaultValue={member?.user_id ?? ""}
-            className="w-full rounded-lg border border-white/10 bg-ink/60 px-3.5 py-2.5 text-sm text-foreground focus:border-accent/50 focus:outline-none"
-          >
-            <option value="">{t.noWebsiteAccount}</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.full_name || "—"}
-                {u.username ? ` · @${u.username}` : ""}
-              </option>
-            ))}
-          </select>
+        {/* Father name (stored in committee_member_private) */}
+        <Field label={t.fatherName} htmlFor="cm-father-name">
+          <TextInput
+            id="cm-father-name"
+            name="fatherName"
+            defaultValue=""
+            placeholder={t.fatherNamePlaceholder}
+          />
           <p className="mt-1.5 text-xs leading-snug text-muted">
-            {t.websiteUserHelper}
+            {t.fatherNameHelper}
           </p>
         </Field>
+
+        {isEdit ? (
+          /* Edit mode: show existing user selector */
+          <Field label={t.websiteUser} htmlFor="cm-user-id">
+            <select
+              id="cm-user-id"
+              name="userId"
+              defaultValue={member?.user_id ?? ""}
+              className="w-full rounded-lg border border-white/10 bg-ink/60 px-3.5 py-2.5 text-sm text-foreground focus:border-accent/50 focus:outline-none"
+            >
+              <option value="">{t.noWebsiteAccount}</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>
+                  {u.full_name || "—"}
+                  {u.username ? ` · @${u.username}` : ""}
+                </option>
+              ))}
+            </select>
+            <p className="mt-1.5 text-xs leading-snug text-muted">
+              {t.websiteUserHelper}
+            </p>
+          </Field>
+        ) : (
+          /* Add mode: show create-account toggle */
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm text-foreground">
+                <input
+                  type="checkbox"
+                  name="createAccount"
+                  checked={createAccount}
+                  onChange={(e) => setCreateAccount(e.target.checked)}
+                  className="h-4 w-4 rounded border-white/20 bg-ink/60 accent-accent"
+                />
+                {t.createAccount}
+              </label>
+            </div>
+            {createAccount && (
+              <p className="rounded-lg border border-accent/20 bg-accent/5 px-4 py-3 text-xs leading-relaxed text-accent">
+                {t.createAccountHelper}
+              </p>
+            )}
+            {!createAccount && (
+              <Field label={t.websiteUser} htmlFor="cm-user-id">
+                <select
+                  id="cm-user-id"
+                  name="userId"
+                  defaultValue=""
+                  className="w-full rounded-lg border border-white/10 bg-ink/60 px-3.5 py-2.5 text-sm text-foreground focus:border-accent/50 focus:outline-none"
+                >
+                  <option value="">{t.noWebsiteAccount}</option>
+                  {users.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.full_name || "—"}
+                      {u.username ? ` · @${u.username}` : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="mt-1.5 text-xs leading-snug text-muted">
+                  {t.websiteUserHelper}
+                </p>
+              </Field>
+            )}
+          </div>
+        )}
+
+        {/* Credentials display (shown once after account creation) */}
+        {"credentials" in state && state.credentials && (
+          <Panel className="border-green-500/30 bg-green-500/5 p-4">
+            <p className="text-sm font-semibold text-green-300">
+              {t.accountCreated}
+            </p>
+            <div className="mt-3 space-y-1.5 text-xs">
+              <p>
+                <span className="text-muted">{t.credentialsEmail}: </span>
+                <span className="font-mono text-foreground">
+                  {state.credentials.email}
+                </span>
+              </p>
+              <p>
+                <span className="text-muted">{t.credentialsUsername}: </span>
+                <span className="font-mono text-foreground">
+                  {state.credentials.username}
+                </span>
+              </p>
+              <p>
+                <span className="text-muted">
+                  {t.credentialsTemporaryPassword}:{" "}
+                </span>
+                <span className="font-mono text-foreground">
+                  {state.credentials.temporaryPassword}
+                </span>
+              </p>
+            </div>
+            <p className="mt-3 text-xs text-yellow-300">
+              {t.credentialsWarning}
+            </p>
+            <div className="mt-4">
+              <PrimaryButton type="button" onClick={onDone}>
+                {t.credentialsDone}
+              </PrimaryButton>
+            </div>
+          </Panel>
+        )}
 
         {/* Error */}
         {error && (
@@ -291,14 +411,18 @@ function MemberForm({
           </p>
         )}
 
-        <div className="flex gap-3 pt-2">
-          <PrimaryButton type="submit" disabled={pending}>
-            {pending ? t.saving : t.save}
-          </PrimaryButton>
-          <SmallButton variant="ghost" onClick={onDone}>
-            {t.cancel}
-          </SmallButton>
-        </div>
+        {/* Hide submit/cancel when credentials are displayed — the only
+            way to close the form is the "Done" button inside the panel. */}
+        {!hasCredentials && (
+          <div className="flex gap-3 pt-2">
+            <PrimaryButton type="submit" disabled={pending}>
+              {pending ? t.saving : t.save}
+            </PrimaryButton>
+            <SmallButton variant="ghost" onClick={onDone}>
+              {t.cancel}
+            </SmallButton>
+          </div>
+        )}
       </form>
     </Panel>
   );

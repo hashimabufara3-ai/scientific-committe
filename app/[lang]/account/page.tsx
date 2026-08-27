@@ -42,6 +42,14 @@ export default async function AccountPage({
     .eq("id", user.id)
     .maybeSingle();
 
+  /* Committee member usernames are permanent — hide the edit control. */
+  const { data: memberRow } = await supabase
+    .from("committee_members")
+    .select("id")
+    .eq("user_id", user.id)
+    .maybeSingle();
+  const isCommitteeMember = !!memberRow;
+
   const fullName =
     profile?.full_name || user.user_metadata?.full_name || "—";
   const username = profile?.username || "";
@@ -95,7 +103,7 @@ export default async function AccountPage({
             </p>
           )}
 
-          {username && (
+          {username && !isCommitteeMember && (
             <UsernameField
               lang={lang}
               username={username}

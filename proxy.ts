@@ -2,7 +2,6 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { getClientIP } from "./lib/security/ip";
 import { checkProxyRateLimit } from "./lib/security/rate-limit";
-import { diag, shortId } from "./lib/auth/diag-log";
 
 /* Next.js 16 renamed middleware → proxy. This proxy:
    1. Applies a global per-IP flood limit (100 req/min) at the edge.
@@ -15,17 +14,6 @@ export async function proxy(request: NextRequest) {
   const ip = getClientIP(request);
   const { success: allowed } = await checkProxyRateLimit(ip);
   if (!allowed) {
-    // TEMP-DIAG
-    const pn = request.nextUrl.pathname;
-    if (pn.startsWith("/auth/confirm") || pn.includes("/auth/callback")) {
-      diag("proxy:flood-block", {
-        correlation: shortId(),
-        method: request.method,
-        pathname: pn,
-        result: "429-rate-limited",
-        status: 429,
-      });
-    }
     return new NextResponse("Too Many Requests", {
       status: 429,
       headers: { "Retry-After": "60" },
