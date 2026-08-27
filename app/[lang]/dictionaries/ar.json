@@ -470,8 +470,6 @@
       "submit": "تسجيل الدخول",
       "submitLoading": "جارٍ تسجيل الدخول…",
       "forgotPassword": "نسيت كلمة المرور؟",
-      "noAccount": "ليس لديك حساب؟",
-      "signUpLink": "أنشئ حساباً",
       "passwordResetSuccess": "تم تحديث كلمة المرور. سجّل الدخول بكلمة المرور الجديدة."
     },
     "signUp": {

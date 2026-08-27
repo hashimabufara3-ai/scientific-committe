@@ -76,16 +76,6 @@ export function SignInForm({
           {pending ? dict.signIn.submitLoading : dict.signIn.submit}
         </PrimaryButton>
       </form>
-
-      <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-5">
-        <p className="text-sm text-muted">{dict.signIn.noAccount}</p>
-        <Link
-          href={`/${lang}/auth/sign-up`}
-          className="text-sm font-semibold text-accent transition-colors hover:text-accent-bright"
-        >
-          {dict.signIn.signUpLink}
-        </Link>
-      </div>
     </div>
   );
 }

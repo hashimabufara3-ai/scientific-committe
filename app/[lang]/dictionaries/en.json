@@ -471,8 +471,6 @@
       "submit": "Sign in",
       "submitLoading": "Signing in…",
       "forgotPassword": "Forgot your password?",
-      "noAccount": "Don't have an account?",
-      "signUpLink": "Create one",
       "passwordResetSuccess": "Your password has been updated. Sign in with your new password."
     },
     "signUp": {
