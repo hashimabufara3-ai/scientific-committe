@@ -1,3 +1,4 @@
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import type { Database } from "./database-types";
@@ -36,5 +37,18 @@ export async function createClient() {
         }
       },
     },
+  });
+}
+
+/* Admin client with service-role key. Bypasses RLS — use ONLY for trusted
+   server-side operations (auth user creation, privileged updates).
+   NEVER expose this client to browser code or return its results in
+   server-action responses. */
+export function createAdminClient() {
+  const supabaseUrl = getRequiredEnv("NEXT_PUBLIC_SUPABASE_URL");
+  const serviceRoleKey = getRequiredEnv("SUPABASE_SERVICE_ROLE_KEY");
+
+  return createSupabaseClient<Database>(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
   });
 }
