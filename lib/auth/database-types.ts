@@ -1,7 +1,7 @@
 /* Minimal typed view of the existing Supabase schema, matching the migrations
-   applied in Phase 2, Phase A, and the committee members migration. Kept
-   small by design — expand as tables are added. Replaces the library's
-   untyped `any` default for the public schema. */
+   applied in Phase 2, Phase A, committee members, and Phase 2A (account
+   system foundation). Kept small by design — expand as tables are added.
+   Replaces the library's untyped `any` default for the public schema. */
 export type Database = {
   public: {
     Tables: {
@@ -12,6 +12,7 @@ export type Database = {
           email: string | null;
           username: string;
           role: "student" | "contributor" | "admin" | "owner";
+          must_change_password: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -21,6 +22,7 @@ export type Database = {
           email?: string | null;
           username?: string;
           role?: "student" | "contributor" | "admin" | "owner";
+          must_change_password?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -30,6 +32,7 @@ export type Database = {
           email?: string | null;
           username?: string;
           role?: "student" | "contributor" | "admin" | "owner";
+          must_change_password?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -83,6 +86,54 @@ export type Database = {
         };
         Relationships: [];
       };
+      committee_member_private: {
+        Row: {
+          committee_member_id: string;
+          father_name: string;
+        };
+        Insert: {
+          committee_member_id: string;
+          father_name?: string;
+        };
+        Update: {
+          committee_member_id?: string;
+          father_name?: string;
+        };
+        Relationships: [];
+      };
+      audit_log: {
+        Row: {
+          id: string;
+          actor_id: string | null;
+          actor_email: string | null;
+          action: string;
+          target_type: string;
+          target_id: string | null;
+          details: Record<string, unknown>;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          actor_id?: string | null;
+          actor_email?: string | null;
+          action: string;
+          target_type: string;
+          target_id?: string | null;
+          details?: Record<string, unknown>;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          actor_id?: string | null;
+          actor_email?: string | null;
+          action?: string;
+          target_type?: string;
+          target_id?: string | null;
+          details?: Record<string, unknown>;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -120,6 +171,12 @@ export type Database = {
           p_username: string;
         };
         Returns: boolean;
+      };
+      resolve_auth_email: {
+        Args: {
+          p_identifier: string;
+        };
+        Returns: string | null;
       };
       admin_list_committee_members: {
         Args: Record<PropertyKey, never>;
@@ -200,6 +257,33 @@ export type Database = {
           major: string;
           gender: string;
         }[];
+      };
+      log_audit_event: {
+        Args: {
+          p_action: string;
+          p_target_type: string;
+          p_target_id?: string;
+          p_details?: Record<string, unknown>;
+        };
+        Returns: undefined;
+      };
+      admin_create_committee_member_private: {
+        Args: {
+          p_committee_member_id: string;
+          p_father_name?: string;
+        };
+        Returns: undefined;
+      };
+      set_must_change_password: {
+        Args: {
+          p_user_id: string;
+          p_must_change: boolean;
+        };
+        Returns: undefined;
+      };
+      clear_must_change_password: {
+        Args: Record<PropertyKey, never>;
+        Returns: undefined;
       };
     };
     Enums: {
