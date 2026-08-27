@@ -196,7 +196,7 @@ export async function checkRateLimit(
     const result = await limiter.limit(key);
     return { success: result.success };
   } catch (err) {
-    console.error("[rate-limit] Upstash unavailable, failing open:", err);
+    console.warn("[rate-limit] Upstash unavailable, failing open:", err);
     return { success: true };
   }
 }

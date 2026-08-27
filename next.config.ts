@@ -49,7 +49,14 @@ function buildCoreHeaders(): { key: string; value: string }[] {
 }
 
 function buildContentSecurityPolicy(): string {
-  const connectSources = ["'self'", "https://www.youtube.com"];
+  const connectSources = [
+    "'self'",
+    "https://www.youtube.com",
+    /* Sentry error reporting (P1-1A): the browser posts events to the
+       ingest endpoint. Wildcard covers every DSN region/subdomain while
+       still restricting connect-src to Sentry's host only. */
+    "https://*.ingest.sentry.io",
+  ];
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (supabaseUrl) {

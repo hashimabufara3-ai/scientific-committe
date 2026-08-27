@@ -1,5 +1,7 @@
 "use client";
 
+import { captureBoundaryError } from "../lib/security/sentry";
+
 /* Root global error boundary (Next.js App Router).
 
    Runs outside the [lang] layout tree, so it must provide its own <html> and
@@ -15,7 +17,20 @@ type GlobalErrorProps = {
   reset: () => void;
 };
 
-export default function GlobalError({ reset }: GlobalErrorProps) {
+export default function GlobalError({ error, reset }: GlobalErrorProps) {
+  /* P1-1A: Safe, fail-open internal error capture. Does NOT alter the visible
+     error screen, its accessibility, or the recover/reload actions. Only a
+     sanitized message and the error digest are sent; all sensitive data is
+     stripped by redactEvent before transmission. */
+  try {
+    captureBoundaryError(error, {
+      component: "global-error",
+      digest: error.digest,
+    });
+  } catch {
+    /* Tracking must never break the error boundary. */
+  }
+
   return (
     <html lang="en" dir="ltr">
       <head>

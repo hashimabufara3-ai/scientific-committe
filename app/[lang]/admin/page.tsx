@@ -4,6 +4,7 @@ import { getDictionary, hasLocale } from "../dictionaries";
 import { requireRole } from "../../../lib/auth/authorize";
 import type { Role } from "../../../lib/auth/roles";
 import { createClient } from "../../../lib/auth/supabase-server";
+import { captureActionError } from "../../../lib/security/sentry";
 import SectionHeading from "../../../components/section-heading";
 import AdminDashboard from "../../../components/admin/admin-dashboard";
 import CommitteeMembersSection from "../../../components/admin/committee-members";
@@ -43,7 +44,11 @@ export default async function AdminPage({
   // Never swallow the RPC error: a failed listing used to render as "0
   // members" with no diagnostics. Log it and show an explicit error state.
   if (membersError) {
-    console.error("[admin] admin_list_members() failed:", membersError);
+    captureActionError(membersError, "admin_list_members RPC failed", {
+      component: "admin-page",
+      route: `/${lang}/admin`,
+      code: membersError.code,
+    });
   }
 
   // Committee members for the About page carousel
@@ -51,7 +56,11 @@ export default async function AdminPage({
     "admin_list_committee_members"
   );
   if (cmError) {
-    console.error("[admin] admin_list_committee_members() failed:", cmError);
+    captureActionError(cmError, "admin_list_committee_members RPC failed", {
+      component: "admin-page",
+      route: `/${lang}/admin`,
+      code: cmError.code,
+    });
   }
 
   return (

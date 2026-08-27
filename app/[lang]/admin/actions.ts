@@ -11,6 +11,7 @@ import {
   createClient,
 } from "../../../lib/auth/supabase-server";
 import { checkRateLimit, LIMITERS } from "../../../lib/security/rate-limit";
+import { captureActionError } from "../../../lib/security/sentry";
 
 /* Admin mutations.
 
@@ -92,7 +93,11 @@ export async function setRoleAction(
     "admin_list_members"
   );
   if (membersError) {
-    console.error("[admin] admin_list_members() failed:", membersError);
+    captureActionError(membersError, "admin_list_members RPC failed", {
+      action: "setRoleAction",
+      route: `/${lang}/admin`,
+      code: membersError.code,
+    });
   }
   const target = (members ?? []).find((member) => member.id === targetId);
 
@@ -151,7 +156,11 @@ export async function transferOwnershipAction(
     "admin_list_members"
   );
   if (membersError) {
-    console.error("[admin] admin_list_members() failed:", membersError);
+    captureActionError(membersError, "admin_list_members RPC failed", {
+      action: "transferOwnershipAction",
+      route: `/${lang}/admin`,
+      code: membersError.code,
+    });
   }
   const target = (members ?? []).find((member) => member.id === targetId);
   if (!target) {
@@ -387,10 +396,14 @@ const supabase = await createClient();
       });
 
     if (authError || !authUser?.user) {
-      console.error(
-        "[admin] auth.admin.createUser failed:",
-        authError?.code,
-        authError?.message
+      captureActionError(
+        authError ?? new Error("createUser returned no user"),
+        "admin.createUser failed",
+        {
+          action: "createCommitteeMemberWithAccountAction",
+          route: `/${lang}/admin`,
+          code: authError?.code,
+        }
       );
       return { ok: false, errorKey: "accountCreationFailed" };
     }
@@ -413,10 +426,14 @@ const supabase = await createClient();
       !actualProfile?.username ||
       !actualProfile.email
     ) {
-      console.error(
-        "[admin] Failed to read back profile after auth user creation:",
-        profileReadError?.code,
-        profileReadError?.message
+      captureActionError(
+        profileReadError ?? new Error("profile read-back empty"),
+        "admin.createUser profile read-back failed",
+        {
+          action: "createCommitteeMemberWithAccountAction",
+          route: `/${lang}/admin`,
+          code: profileReadError?.code,
+        }
       );
       await adminSupabase.auth.admin.deleteUser(authUserId);
       return { ok: false, errorKey: "accountCreationFailed" };
@@ -436,11 +453,11 @@ const supabase = await createClient();
     );
 
     if (mcpError) {
-      console.error(
-        "[admin] set_must_change_password failed:",
-        mcpError.code,
-        mcpError.message
-      );
+      captureActionError(mcpError, "set_must_change_password failed", {
+        action: "createCommitteeMemberWithAccountAction",
+        route: `/${lang}/admin`,
+        code: mcpError.code,
+      });
       /* Compensating: delete the auth user we just created. */
       await adminSupabase.auth.admin.deleteUser(authUserId);
       return { ok: false, errorKey: "accountCreationFailed" };
@@ -465,9 +482,14 @@ const supabase = await createClient();
     );
 
     if (memberError || !memberId) {
-      console.error(
-        "[admin] admin_create_committee_member failed:",
-        memberError?.message
+      captureActionError(
+        memberError ?? new Error("createCommitteeMember returned empty"),
+        "admin_create_committee_member failed",
+        {
+          action: "createCommitteeMemberWithAccountAction",
+          route: `/${lang}/admin`,
+          code: memberError?.code,
+        }
       );
       /* Compensating: delete the auth user. */
       await adminSupabase.auth.admin.deleteUser(authUserId);
@@ -488,9 +510,14 @@ const supabase = await createClient();
       );
 
       if (privateError) {
-        console.error(
-          "[admin] admin_create_committee_member_private failed:",
-          privateError.message
+        captureActionError(
+          privateError,
+          "admin_create_committee_member_private failed",
+          {
+            action: "createCommitteeMemberWithAccountAction",
+            route: `/${lang}/admin`,
+            code: privateError.code,
+          }
         );
         /* Compensating: delete member + auth user. */
         await supabase.rpc("admin_delete_committee_member", {
@@ -514,7 +541,11 @@ const supabase = await createClient();
     });
 
     if (auditError) {
-      console.error("[admin] log_audit_event failed:", auditError.message);
+      captureActionError(auditError, "log_audit_event failed", {
+        action: "createCommitteeMemberWithAccountAction",
+        route: `/${lang}/admin`,
+        code: auditError.code,
+      });
       /* Audit failure is non-fatal — the member was created successfully. */
     }
 
@@ -531,7 +562,10 @@ const supabase = await createClient();
       },
     };
   } catch (err) {
-    console.error("[admin] createCommitteeMemberWithAccountAction error:", err);
+    captureActionError(err, "createCommitteeMemberWithAccountAction error", {
+      action: "createCommitteeMemberWithAccountAction",
+      route: `/${lang}/admin`,
+    });
 
     /* Catch-all compensation: if we created an auth user but something
        unexpected failed, try to clean up. */

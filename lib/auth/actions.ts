@@ -13,6 +13,7 @@ import {
 } from "./usernames";
 import { getServerActionIP } from "../security/ip";
 import { checkRateLimit, emailKey, LIMITERS } from "../security/rate-limit";
+import { captureActionError } from "../security/sentry";
 
 export type AuthState = {
   error?: string;
@@ -229,12 +230,11 @@ export async function signUp(
     await supabase.rpc("username_available", {
       p_username: username,
     });  if (availabilityError) {
-    console.error(
-      "[auth] username_available() RPC failed:",
-      availabilityError.code,
-      availabilityError.message,
-      availabilityError.details
-    );
+    captureActionError(availabilityError, "username_available RPC failed", {
+      action: "signUp",
+      route: `/${lang}/auth/sign-up`,
+      code: availabilityError.code,
+    });
   }
   if (usernameAvailable === false) return { error: errors.usernameTaken };
 
@@ -247,12 +247,11 @@ export async function signUp(
     },
   });
   if (error) {
-    console.error(
-      "[auth] supabase.auth.signUp failed:",
-      error.code,
-      error.status,
-      error.message
-    );
+    captureActionError(error, "supabase.auth.signUp failed", {
+      action: "signUp",
+      route: `/${lang}/auth/sign-up`,
+      code: error.code,
+    });
     return { error: mapAuthError(error, errors) };
   }
 
@@ -460,7 +459,11 @@ export async function checkUsernameAvailability(
     p_username: username,
   });
   if (error) {
-    console.error("[auth] username_available() RPC failed:", error.code, error.message);
+    captureActionError(error, "username_available RPC failed", {
+      action: "checkUsernameAvailability",
+      component: "sign-up-form",
+      code: error.code,
+    });
     return { available: false };
   }
   return { available: data !== false };
@@ -507,11 +510,11 @@ export async function forceChangePassword(
      use the function which bypasses RLS. */
   const { error: mcpError } = await supabase.rpc("clear_must_change_password");
   if (mcpError) {
-    console.error(
-      "[auth] clear_must_change_password failed:",
-      mcpError.code,
-      mcpError.message
-    );
+    captureActionError(mcpError, "clear_must_change_password failed", {
+      action: "forceChangePassword",
+      route: `/${lang}/auth/change-password`,
+      code: mcpError.code,
+    });
     /* Non-fatal: the password was changed. The proxy will continue to
        redirect, but the user can sign in with the new password. */
   }

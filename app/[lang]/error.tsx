@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { captureBoundaryError } from "../../lib/security/sentry";
 
 /* Localized error boundary for the [lang] route tree (Next.js App Router).
 
@@ -59,12 +60,26 @@ const COPY: Record<
   },
 };
 
-export default function Error({ reset }: ErrorPageProps) {
+export default function Error({ error, reset }: ErrorPageProps) {
   const pathname = usePathname() ?? "";
   const match = pathname.match(LOCALE_PATTERN);
   const lang = match ? match[1] : "en";
   const isAr = lang === "ar";
   const c = COPY[isAr ? "ar" : "en"];
+
+  /* P1-1A: Safe, fail-open internal error capture. This does NOT alter the
+     visible error page, its accessibility/RTL handling, locale derivation, or
+     the reset flow. Only a sanitized message and a path label are sent; all
+     sensitive data is stripped by redactEvent before transmission. */
+  try {
+    captureBoundaryError(error, {
+      component: "lang-error",
+      route: pathname || undefined,
+      digest: error.digest,
+    });
+  } catch {
+    /* Tracking must never break the error boundary. */
+  }
 
   return (
     <main
