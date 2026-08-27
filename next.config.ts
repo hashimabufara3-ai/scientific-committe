@@ -53,10 +53,29 @@ function buildContentSecurityPolicy(): string {
     "'self'",
     "https://www.youtube.com",
     /* Sentry error reporting (P1-1A): the browser posts events to the
-       ingest endpoint. Wildcard covers every DSN region/subdomain while
+       ingest endpoint. Wildcard covers the default ingest host while
        still restricting connect-src to Sentry's host only. */
     "https://*.ingest.sentry.io",
   ];
+
+  /* P1-1A fix: the DSN may point to a REGIONAL ingest host (e.g.
+     o<org>.ingest.us.sentry.io) which the *.ingest.sentry.io wildcard does
+     not cover. Derive the exact ORIGIN from the DSN at build time so the
+     browser is allowed to POST envelopes to whichever Sentry host the DSN
+     actually targets. Only the origin (protocol + host) is used — the DSN
+     key is never read, printed, or embedded. Invalid/missing DSN falls back
+     to the existing sources unchanged. */
+  const sentryDsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
+  if (sentryDsn) {
+    try {
+      const origin = new URL(sentryDsn).origin;
+      if (origin.startsWith("https://")) {
+        connectSources.push(origin);
+      }
+    } catch {
+      /* Invalid DSN — keep the existing connect-src entries. */
+    }
+  }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   if (supabaseUrl) {
