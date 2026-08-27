@@ -23,6 +23,18 @@ export type AuthState = {
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
 
+/* Timing-hardening delay (L-4): when a username does not resolve, the action
+   would otherwise return immediately, whereas an existing-username + wrong-
+   password attempt must do the full signInWithPassword() round-trip. This
+   small bounded delay approximates that latency so the two cases are not
+   distinguishable by response time. It is purely cosmetic timing-hardening —
+   never part of authentication correctness, and removable/adjustable
+   independently. Uses a Promise + setTimeout so it never blocks the event
+   loop. */
+function delayAuthProbe(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 320));
+}
+
 function readString(formData: FormData, name: string): string {
   const value = formData.get(name);
   return typeof value === "string" ? value : "";
@@ -136,7 +148,11 @@ export async function signIn(
       p_identifier: identifier,
     });
     if (!resolvedEmail) {
-      /* Generic failure — do not reveal whether the username exists. */
+      /* Generic failure — do not reveal whether the username exists.
+         Timing-hardening: briefly delay so this fast path is not trivially
+         distinguishable (by response time) from the slower signInWithPassword
+         path taken for an existing username. */
+      await delayAuthProbe();
       return { error: errors.invalidCredentials };
     }
     authEmail = resolvedEmail;
