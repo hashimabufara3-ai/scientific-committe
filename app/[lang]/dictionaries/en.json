@@ -369,7 +369,7 @@
     "you": "You",
     "noControls": "No role controls available.",
     "delete": "Delete",
-    "deleteConfirm": "Delete this account permanently? This cannot be undone. Their committee member record, if any, will remain but be unlinked.",
+    "deleteConfirm": "Delete this account permanently? This cannot be undone. If they are a committee member, their About Us record will also be removed.",
     "saving": "Saving…",
     "cancel": "Cancel",
     "transitions": {

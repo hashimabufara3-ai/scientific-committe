@@ -201,12 +201,18 @@ export async function transferOwnershipAction(
      3. Calls the SECURITY DEFINER admin_delete_user() RPC, which is the
         AUTHORITATIVE authorization gate (it enforces every target rule and is
         not bypassable by calling the RPC directly — it raises otherwise).
-     4. Only after the RPC succeeds, deletes the Auth user via the secure
-        service-role client. The service-role key is never exposed to the
-        client. This cascade-deletes the profile and sets any linked
-        committee_members.user_id to NULL (the committee record is preserved).
-     5. Logs an audit event (best-effort; target info captured before delete).
-     6. Revalidates the admin page. */
+     4. If the target account is linked to a committee member, deletes that
+        committee record FIRST via the existing authorized
+        admin_delete_committee_member() RPC (which re-runs require_admin_role()
+        and renumbers the survivors to a dense 1..N sort_order). This happens
+        BEFORE the Auth delete so that a successful account deletion can never
+        leave a visible stale committee member in About Us. If this cleanup
+        fails, the account deletion is aborted (no partial success).
+     5. Only after the linked-member cleanup, deletes the Auth user via the
+        secure service-role client. The service-role key is never exposed to
+        the client. This cascade-deletes the profile.
+     6. Logs an audit event (best-effort; target info captured before delete).
+     7. Revalidates the admin page. */
 export async function deleteAccountAction(
   _prev: AdminActionResult,
   formData: FormData
@@ -251,8 +257,59 @@ export async function deleteAccountAction(
   });
   if (error) return { ok: false, errorKey: mapRpcError(error.message) };
 
-  /* Now that authorization succeeded, delete the actual Auth user with the
-     service-role client (server-side only). */
+  /* Resolve and delete any committee member linked to this account BEFORE
+     deleting the Auth user. admin_list_committee_members() is the authorized
+     SECURITY DEFINER listing (admin/owner only) that returns user_id for ALL
+     members (active and inactive) — a direct RLS select would hide inactive
+     members. Resolution is keyed strictly on `user_id = targetId`, and the
+     unique partial index guarantees at most one committee member per account,
+     so we can never touch an unrelated member. Deletion reuses the existing
+     admin_delete_committee_member() RPC, which re-runs require_admin_role()
+     and renumbers survivors to a dense 1..N sort_order.
+
+     If the resolution or the cleanup fails at any point, abort the whole
+     account deletion (fail-closed) so we never report success while an
+     account that should be removed still has a linked committee member. */
+  const { data: committeeMembers, error: committeeListError } = await supabase.rpc(
+    "admin_list_committee_members"
+  );
+  if (committeeListError) {
+    captureActionError(
+      committeeListError,
+      "admin_list_committee_members RPC failed",
+      {
+        action: "deleteAccountAction",
+        route: `/${lang}/admin`,
+        code: committeeListError.code,
+      }
+    );
+    return { ok: false, errorKey: "generic" };
+  }
+  const linkedCommitteeMember = (committeeMembers ?? []).find(
+    (member) => member.user_id === targetId
+  );
+  if (linkedCommitteeMember) {
+    const { error: memberDeleteError } = await supabase.rpc(
+      "admin_delete_committee_member",
+      { p_id: linkedCommitteeMember.id }
+    );
+    if (memberDeleteError) {
+      captureActionError(
+        memberDeleteError,
+        "admin_delete_committee_member failed during account deletion",
+        {
+          action: "deleteAccountAction",
+          route: `/${lang}/admin`,
+          code: memberDeleteError.code,
+        }
+      );
+      return { ok: false, errorKey: "generic" };
+    }
+  }
+
+  /* Now that authorization succeeded and any linked committee member has been
+     removed, delete the actual Auth user with the service-role client
+     (server-side only). */
   const adminSupabase = createAdminClient();
   const { error: deleteError } =
     await adminSupabase.auth.admin.deleteUser(targetId);
@@ -274,10 +331,13 @@ export async function deleteAccountAction(
       username: target?.username ?? null,
       full_name: target?.full_name ?? null,
       role: target?.role ?? null,
+      committee_member_id: linkedCommitteeMember?.id ?? null,
+      committee_member_deleted: linkedCommitteeMember ? true : null,
     } as Record<string, unknown>,
   });
 
   revalidatePath(`/${lang}/admin`);
+  if (linkedCommitteeMember) revalidatePath(`/${lang}/about`);
   return { ok: true };
 }
 
