@@ -5,6 +5,7 @@ import type { Dictionary } from "@/app/[lang]/dictionaries";
 import {
   setRoleAction,
   transferOwnershipAction,
+  deleteAccountAction,
   type AdminActionResult,
 } from "@/app/[lang]/admin/actions";
 import { canAssign, ROLES, type Role } from "@/lib/auth/roles";
@@ -13,6 +14,7 @@ import {
   Chip,
   Panel,
   PrimaryButton,
+  SmallButton,
   TextInput,
 } from "../contribute/primitives";
 import { SearchIcon, UsersIcon } from "../icons";
@@ -52,6 +54,21 @@ function formatDate(lang: string, iso: string): string {
   }).format(date);
 }
 
+/* Delete-target gating for the UI. This is UX only — the SECURITY DEFINER
+   admin_delete_user() RPC re-enforces the exact same rules server-side and is
+   authoritative even if this gating is bypassed. Mirrors the RPC rules:
+     - nobody may delete the Owner;
+     - admin may delete student/contributor only;
+     - owner may delete admin/student/contributor. */
+function canDeleteMember(actor: Role, targetRole: Role): boolean {
+  if (targetRole === "owner") return false;
+  if (actor === "owner") return true;
+  if (actor === "admin") {
+    return targetRole === "student" || targetRole === "contributor";
+  }
+  return false;
+}
+
 /* One member row. The visible transitions are the exact allowlist entries the
    current actor may perform on this member — anything else is not rendered
    and is rejected server-side anyway. */
@@ -74,6 +91,11 @@ function MemberRow({
     setRoleAction,
     INITIAL_STATE
   );
+  const [deleteState, deleteFormAction, deletePending] = useActionState(
+    deleteAccountAction,
+    INITIAL_STATE
+  );
+  const [confirming, setConfirming] = useState(false);
 
   const isSelf = member.id === currentUserId;
   const transitions = ROLES.filter((role) =>
@@ -82,6 +104,10 @@ function MemberRow({
   /* errorKey is only set after a failed action, so the pristine initial
      state ({ ok: false }) shows no error. */
   const error = state.errorKey ? t.errors[state.errorKey] : null;
+  const deleteError = deleteState.errorKey
+    ? t.errors[deleteState.errorKey]
+    : null;
+  const canDelete = !isSelf && canDeleteMember(currentRole, member.role);
 
   return (
     <Panel className="p-5">
@@ -137,6 +163,50 @@ function MemberRow({
         member.role !== "owner" && (
           <p className="mt-3 text-xs text-muted">{t.noControls}</p>
         )
+      )}
+
+      {canDelete && (
+        <div className="mt-4 border-t border-white/5 pt-4">
+          {confirming ? (
+            <div className="space-y-3">
+              <p className="text-sm text-foreground">
+                {t.deleteConfirm}{" "}
+                <span className="font-semibold">
+                  {member.full_name || t.unnamed}
+                </span>
+              </p>
+              {deleteError && (
+                <p role="alert" className="text-xs text-red-300">
+                  {deleteError}
+                </p>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <form action={deleteFormAction}>
+                  <input type="hidden" name="lang" value={lang} />
+                  <input type="hidden" name="targetId" value={member.id} />
+                  <SmallButton
+                    variant="danger"
+                    type="submit"
+                    disabled={deletePending}
+                  >
+                    {deletePending ? t.saving : t.delete}
+                  </SmallButton>
+                </form>
+                <SmallButton
+                  variant="ghost"
+                  onClick={() => setConfirming(false)}
+                  disabled={deletePending}
+                >
+                  {t.cancel}
+                </SmallButton>
+              </div>
+            </div>
+          ) : (
+            <SmallButton variant="danger" onClick={() => setConfirming(true)}>
+              {t.delete}
+            </SmallButton>
+          )}
+        </div>
       )}
     </Panel>
   );

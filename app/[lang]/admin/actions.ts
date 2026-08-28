@@ -30,6 +30,9 @@ export type AdminErrorKey =
   | "transferOnlyOwner"
   | "transferSelf"
   | "transferNotFound"
+  | "deleteSelf"
+  | "deleteOwner"
+  | "deleteAdmin"
   | "generic";
 
 export type AdminActionResult = {
@@ -47,6 +50,9 @@ function readLang(formData: FormData): string {
    a defensive mapping for anything the database rejects. */
 function mapRpcError(message: string): AdminErrorKey {
   const m = message.toLowerCase();
+  if (m.includes("owner account")) return "deleteOwner";
+  if (m.includes("another admin")) return "deleteAdmin";
+  if (m.includes("your own account")) return "deleteSelf";
   if (m.includes("owner")) return "ownerLocked";
   if (m.includes("unchanged")) return "roleUnchanged";
   if (m.includes("own role")) return "selfChange";
@@ -181,6 +187,95 @@ export async function transferOwnershipAction(
     target: targetId,
   });
   if (error) return { ok: false, errorKey: mapRpcError(error.message) };
+
+  revalidatePath(`/${lang}/admin`);
+  return { ok: true };
+}
+
+/* Delete a website account.
+
+   A website account is a Supabase Auth user (with a 1:1 profiles row that
+   cascades on delete). Deleting it requires the Admin API, so this action:
+     1. Re-reads the actor's role from the database and re-checks admin/owner.
+     2. Rate-limits.
+     3. Calls the SECURITY DEFINER admin_delete_user() RPC, which is the
+        AUTHORITATIVE authorization gate (it enforces every target rule and is
+        not bypassable by calling the RPC directly — it raises otherwise).
+     4. Only after the RPC succeeds, deletes the Auth user via the secure
+        service-role client. The service-role key is never exposed to the
+        client. This cascade-deletes the profile and sets any linked
+        committee_members.user_id to NULL (the committee record is preserved).
+     5. Logs an audit event (best-effort; target info captured before delete).
+     6. Revalidates the admin page. */
+export async function deleteAccountAction(
+  _prev: AdminActionResult,
+  formData: FormData
+): Promise<AdminActionResult> {
+  const lang = readLang(formData);
+  const targetId = String(formData.get("targetId") ?? "");
+
+  const session = await getSessionRole();
+  if (!session) redirect(`/${lang}/auth/sign-in`);
+  if (session.role !== "admin" && session.role !== "owner") {
+    return { ok: false, errorKey: "notAllowed" };
+  }
+
+  /* Rate limit: 30 requests / minute per authenticated admin */
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.adminAction,
+    session.user.id
+  );
+  if (!allowed) return { ok: false, errorKey: "notAllowed" };
+
+  const supabase = await createClient();
+
+  /* Target info for the audit log, captured from the same server-authorized
+     admin_list_members() RPC the dashboard uses, BEFORE deletion. */
+  const { data: members, error: membersError } = await supabase.rpc(
+    "admin_list_members"
+  );
+  if (membersError) {
+    captureActionError(membersError, "admin_list_members RPC failed", {
+      action: "deleteAccountAction",
+      route: `/${lang}/admin`,
+      code: membersError.code,
+    });
+  }
+  const target = (members ?? []).find((member) => member.id === targetId);
+
+  /* Authoritative authorization: admin_delete_user() enforces owner
+     protection, no self-delete, and the admin-vs-admin rule, raising on any
+     unauthorized request. It performs no deletion itself. */
+  const { error } = await supabase.rpc("admin_delete_user", {
+    p_user_id: targetId,
+  });
+  if (error) return { ok: false, errorKey: mapRpcError(error.message) };
+
+  /* Now that authorization succeeded, delete the actual Auth user with the
+     service-role client (server-side only). */
+  const adminSupabase = createAdminClient();
+  const { error: deleteError } =
+    await adminSupabase.auth.admin.deleteUser(targetId);
+  if (deleteError) {
+    captureActionError(deleteError, "auth.admin.deleteUser failed", {
+      action: "deleteAccountAction",
+      route: `/${lang}/admin`,
+      code: deleteError.code,
+    });
+    return { ok: false, errorKey: "generic" };
+  }
+
+  /* Best-effort audit log. Credentials are never logged. */
+  await supabase.rpc("log_audit_event", {
+    p_action: "account_deleted",
+    p_target_type: "profile",
+    p_target_id: targetId,
+    p_details: {
+      username: target?.username ?? null,
+      full_name: target?.full_name ?? null,
+      role: target?.role ?? null,
+    } as Record<string, unknown>,
+  });
 
   revalidatePath(`/${lang}/admin`);
   return { ok: true };

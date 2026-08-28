@@ -368,6 +368,10 @@
     "unnamed": "Unnamed member",
     "you": "You",
     "noControls": "No role controls available.",
+    "delete": "Delete",
+    "deleteConfirm": "Delete this account permanently? This cannot be undone. Their committee member record, if any, will remain but be unlinked.",
+    "saving": "Saving…",
+    "cancel": "Cancel",
     "transitions": {
       "toStudent": "Make student",
       "toContributor": "Make contributor",
@@ -393,6 +397,9 @@
       "transferOnlyOwner": "Only the Owner can transfer ownership.",
       "transferSelf": "You cannot transfer ownership to yourself.",
       "transferNotFound": "The selected user no longer exists.",
+      "deleteSelf": "You cannot delete your own account.",
+      "deleteOwner": "The Owner account cannot be deleted.",
+      "deleteAdmin": "An Admin cannot delete another Admin account.",
       "generic": "The operation failed. Please try again."
     },
     "committeeMembers": {
