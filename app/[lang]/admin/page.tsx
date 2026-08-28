@@ -82,6 +82,7 @@ export default async function AdminPage({
         <CommitteeMembersSection
           lang={lang}
           t={dict.adminPage.committeeMembers}
+          currentRole={role}
           members={(committeeMembers ?? []).map((cm) => ({
             id: cm.id,
             user_id: cm.user_id,

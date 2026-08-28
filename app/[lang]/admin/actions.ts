@@ -476,10 +476,15 @@ function slugUsername(name: string): string {
 /* Create a new committee member WITH a website account.
    This action:
    1. Creates a Supabase Auth user (via Admin API, email_confirm: true)
-   2. The handle_new_user() trigger creates the profile
-   3. Sets must_change_password = true
-   4. Creates the committee member record (linked to the new user)
-   5. Stores father_name in committee_member_private
+   2. The handle_new_user() trigger creates the profile (role defaults to
+      student)
+   3. Assigns the requested account role via assign_role() — the authoritative
+      SECURITY DEFINER gate that re-checks the actor's role from the database
+      and enforces the transition allowlist (admin may only make
+      student/contributor; owner may also make admin; owner is never
+      assignable). The role chooser is UX only; this call is authoritative.
+   4. Sets must_change_password = true
+   5. Creates the committee member record (linked to the new user)
    6. Logs the audit event
    7. Returns credentials ONCE (never stored in DB)
 
@@ -513,7 +518,15 @@ export async function createCommitteeMemberWithAccountAction(
   const gender = String(formData.get("gender") ?? "") as "male" | "female";
   const sortOrder = Number(formData.get("sortOrder") ?? 0);
   const isActive = formData.get("isActive") === "on";
-  const fatherName = String(formData.get("fatherName") ?? "").trim();
+  /* Account role for the new user, chosen from the role chooser in the form.
+     Defaults to student (the profiles.role column default). Only
+     student/contributor/admin are valid; assign_role() below is the
+     authoritative check that re-validates against the actor's role. */
+  const accountRoleRaw = String(formData.get("accountRole") ?? "").trim();
+  const accountRole =
+    accountRoleRaw === "contributor" || accountRoleRaw === "admin"
+      ? accountRoleRaw
+      : "student";
 
   /* Validate required fields (same checks as admin_create_committee_member) */
   if (!nameAr) return { ok: false, errorKey: "validation" };
@@ -597,7 +610,32 @@ const supabase = await createClient();
     const actualUsername = actualProfile.username;
     const actualEmail: string = actualProfile.email;
 
-    /* Step 2: Set must_change_password on the new profile.
+    /* Step 2: Assign the requested account role via assign_role().
+       The handle_new_user() trigger created the profile with role defaulting
+       to 'student'. When a contributor/admin role was requested, assign_role()
+       re-checks the actor's role from the database and enforces the explicit
+       transition allowlist (admin -> student/contributor only; owner ->
+       student/contributor/admin; owner is never assignable). This keeps the
+       server authorization authoritative — the UI role chooser is UX only.
+       Students need no call (the default is already 'student'). */
+    if (accountRole !== "student") {
+      const { error: roleError } = await supabase.rpc("assign_role", {
+        target: authUserId,
+        new_role: accountRole,
+      });
+      if (roleError) {
+        captureActionError(roleError, "assign_role failed during account creation", {
+          action: "createCommitteeMemberWithAccountAction",
+          route: `/${lang}/admin`,
+          code: roleError.code,
+        });
+        /* Compensating: delete the auth user we just created. */
+        await adminSupabase.auth.admin.deleteUser(authUserId);
+        return { ok: false, errorKey: "generic" };
+      }
+    }
+
+    /* Step 3: Set must_change_password on the new profile.
        The trigger already created the profile row. */
     const { error: mcpError } = await supabase.rpc(
       "set_must_change_password",
@@ -618,7 +656,7 @@ const supabase = await createClient();
       return { ok: false, errorKey: "accountCreationFailed" };
     }
 
-    /* Step 3: Create committee member record, linked to the new user. */
+    /* Step 4: Create committee member record, linked to the new user. */
   
     const { data: memberId, error: memberError } = await supabase.rpc(
       "admin_create_committee_member",
@@ -654,37 +692,9 @@ const supabase = await createClient();
       };
     }
 
-    /* Step 4: Store father_name in committee_member_private. */
-    if (fatherName) {
-      const { error: privateError } = await supabase.rpc(
-        "admin_create_committee_member_private",
-        {
-          p_committee_member_id: memberId as string,
-          p_father_name: fatherName,
-        }
-      );
-
-      if (privateError) {
-        captureActionError(
-          privateError,
-          "admin_create_committee_member_private failed",
-          {
-            action: "createCommitteeMemberWithAccountAction",
-            route: `/${lang}/admin`,
-            code: privateError.code,
-          }
-        );
-        /* Compensating: delete member + auth user. */
-        await supabase.rpc("admin_delete_committee_member", {
-          p_id: memberId as string,
-        });
-        await adminSupabase.auth.admin.deleteUser(authUserId);
-        return { ok: false, errorKey: "accountCreationFailed" };
-      }
-    }
-
     /* Step 5: Log the audit event.
-       Never log passwords or credentials. Only log member_id and auth_user_id. */
+       Never log passwords or credentials. Only log member_id, auth_user_id,
+       and the account role that was assigned. */
     const { error: auditError } = await supabase.rpc("log_audit_event", {
       p_action: "committee_member_account_created",
       p_target_type: "committee_member",
@@ -692,6 +702,7 @@ const supabase = await createClient();
       p_details: {
         auth_user_id: authUserId,
         username: actualUsername,
+        account_role: accountRole,
       } as Record<string, unknown>,
     });
 

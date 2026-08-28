@@ -57,6 +57,7 @@ function MemberForm({
   t,
   member,
   users,
+  currentRole,
   onDone,
   savedScrollY,
 }: {
@@ -64,11 +65,17 @@ function MemberForm({
   t: CommitteeMembersDict;
   member?: CommitteeMember;
   users: SiteUser[];
+  currentRole: "student" | "contributor" | "admin" | "owner";
   onDone: () => void;
   savedScrollY: { current: number };
 }) {
   const isEdit = !!member;
   const [createAccount, setCreateAccount] = useState(false);
+  /* Account role for a newly created website account. Defaults to Student.
+     The chooser is UX only — the server action re-validates via assign_role(). */
+  const [accountRole, setAccountRole] = useState<"student" | "contributor" | "admin">(
+    "student"
+  );
 
   /* Use the with-account action when creating a new member with account,
      otherwise use the standard create/edit actions.
@@ -287,19 +294,6 @@ function MemberForm({
           </div>
         </div>
 
-        {/* Father name (stored in committee_member_private) */}
-        <Field label={t.fatherName} htmlFor="cm-father-name">
-          <TextInput
-            id="cm-father-name"
-            name="fatherName"
-            defaultValue=""
-            placeholder={t.fatherNamePlaceholder}
-          />
-          <p className="mt-1.5 text-xs leading-snug text-muted">
-            {t.fatherNameHelper}
-          </p>
-        </Field>
-
         {isEdit ? (
           /* Edit mode: show existing user selector */
           <Field label={t.websiteUser} htmlFor="cm-user-id">
@@ -322,7 +316,9 @@ function MemberForm({
             </p>
           </Field>
         ) : (
-          /* Add mode: show create-account toggle */
+          /* Add mode: show create-account toggle only. When enabled, choose
+             the new account's role below it. There is no existing-user
+             selector here — accounts are created fresh. */
           <div className="space-y-3">
             <div className="flex items-center gap-3">
               <label className="flex items-center gap-2 text-sm text-foreground">
@@ -330,37 +326,87 @@ function MemberForm({
                   type="checkbox"
                   name="createAccount"
                   checked={createAccount}
-                  onChange={(e) => setCreateAccount(e.target.checked)}
+                  onChange={(e) => {
+                    setCreateAccount(e.target.checked);
+                    setAccountRole("student");
+                  }}
                   className="h-4 w-4 rounded border-white/20 bg-ink/60 accent-accent"
                 />
                 {t.createAccount}
               </label>
             </div>
             {createAccount && (
-              <p className="rounded-lg border border-accent/20 bg-accent/5 px-4 py-3 text-xs leading-relaxed text-accent">
-                {t.createAccountHelper}
-              </p>
-            )}
-            {!createAccount && (
-              <Field label={t.websiteUser} htmlFor="cm-user-id">
-                <select
-                  id="cm-user-id"
-                  name="userId"
-                  defaultValue=""
-                  className="w-full rounded-lg border border-white/10 bg-ink/60 px-3.5 py-2.5 text-sm text-foreground focus:border-accent/50 focus:outline-none"
-                >
-                  <option value="">{t.noWebsiteAccount}</option>
-                  {users.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.full_name || "—"}
-                      {u.username ? ` · @${u.username}` : ""}
-                    </option>
-                  ))}
-                </select>
-                <p className="mt-1.5 text-xs leading-snug text-muted">
-                  {t.websiteUserHelper}
+              <>
+                <p className="rounded-lg border border-accent/20 bg-accent/5 px-4 py-3 text-xs leading-relaxed text-accent">
+                  {t.createAccountHelper}
                 </p>
-              </Field>
+                {/* Account role chooser. Visibility is UX only: the server
+                    reassigns via assign_role(), which authoritatively enforces
+                    the actor's capability. Admin never sees "Make admin";
+                    owner never sees an Owner option. */}
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted">
+                    {t.accountRole}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <label
+                      className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3.5 py-2.5 text-sm transition-colors ${
+                        accountRole === "student"
+                          ? "border-accent/60 bg-accent/10 text-foreground"
+                          : "border-white/10 bg-ink/60 text-foreground hover:border-white/20"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="accountRole"
+                        value="student"
+                        checked={accountRole === "student"}
+                        onChange={() => setAccountRole("student")}
+                        className="sr-only"
+                      />
+                      {t.roleStudent}
+                    </label>
+
+                    <label
+                      className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3.5 py-2.5 text-sm transition-colors ${
+                        accountRole === "contributor"
+                          ? "border-accent/60 bg-accent/10 text-foreground"
+                          : "border-white/10 bg-ink/60 text-foreground hover:border-white/20"
+                      }`}
+                    >
+                      <input
+                        type="radio"
+                        name="accountRole"
+                        value="contributor"
+                        checked={accountRole === "contributor"}
+                        onChange={() => setAccountRole("contributor")}
+                        className="sr-only"
+                      />
+                      {t.makeContributor}
+                    </label>
+
+                    {currentRole === "owner" && (
+                      <label
+                        className={`flex cursor-pointer items-center gap-2 rounded-lg border px-3.5 py-2.5 text-sm transition-colors ${
+                          accountRole === "admin"
+                            ? "border-accent/60 bg-accent/10 text-foreground"
+                            : "border-white/10 bg-ink/60 text-foreground hover:border-white/20"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="accountRole"
+                          value="admin"
+                          checked={accountRole === "admin"}
+                          onChange={() => setAccountRole("admin")}
+                          className="sr-only"
+                        />
+                        {t.makeAdmin}
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </>
             )}
           </div>
         )}
@@ -498,12 +544,14 @@ export default function CommitteeMembersSection({
   t,
   members,
   users,
+  currentRole,
   loadFailed,
 }: {
   lang: string;
   t: CommitteeMembersDict;
   members: CommitteeMember[];
   users: SiteUser[];
+  currentRole: "student" | "contributor" | "admin" | "owner";
   loadFailed: boolean;
 }) {
   const [query, setQuery] = useState("");
@@ -619,6 +667,7 @@ export default function CommitteeMembersSection({
           lang={lang}
           t={t}
           users={users}
+          currentRole={currentRole}
           onDone={() => setShowForm(false)}
           savedScrollY={savedScrollY}
         />
@@ -632,6 +681,7 @@ export default function CommitteeMembersSection({
             t={t}
             member={editing}
             users={users}
+            currentRole={currentRole}
             onDone={() => setEditing(null)}
             savedScrollY={savedScrollY}
           />
