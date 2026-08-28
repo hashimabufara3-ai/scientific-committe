@@ -20,6 +20,7 @@
 
 import { Ratelimit, type Duration } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
+import { logger } from "../logger";
 
 /* ---------------------------------------------------------------------------
    Redis client singleton
@@ -196,7 +197,9 @@ export async function checkRateLimit(
     const result = await limiter.limit(key);
     return { success: result.success };
   } catch (err) {
-    console.warn("[rate-limit] Upstash unavailable, failing open:", err);
+    logger.warn("rate-limit Upstash unavailable, failing open", {
+      err: err instanceof Error ? err.message : String(err),
+    });
     return { success: true };
   }
 }
