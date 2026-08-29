@@ -3,16 +3,15 @@
    ---------------------------------------------------------------------------
 
    This module is the ONE type + helper home for the site's materials catalog.
-   There is no database, backend, or API behind it: the shared content store
-   (content-store.ts) holds the in-memory catalog and persists it to
-   localStorage, and every add / edit / delete mutates that store. Soft delete
-   is simulated with a `deleted` flag: hidden from the UI but still present in
-   the array.
+   Production data is read from PostgreSQL via lib/content/data-access.ts; this
+   module supplies the shared types those rows map to, plus the pure helpers
+   (localized naming, visibility, duplicate detection) used across the feature.
+   Soft delete is modeled with a `deleted` flag: hidden from the UI but still
+   present in the array.
 
-   Because the catalog lives in the shared store, everything else is derived
-   from it: the /contribute material selector, the contributor submissions,
-   the Summaries cards, the material detail page, and the summary detail page
-   all resolve a material by its canonical `id`.
+   The catalog is resolved by canonical `id`: the /contribute material selector,
+   the contributor submissions, the Summaries cards, the material detail page,
+   and the summary detail page all identify a material by it.
 
    The content model is deliberately flat:
 
@@ -25,12 +24,10 @@
    the Arabic display name; every render shows the name matching the current
    locale via `displayName`, and searches match both names.
 
-   The current user has no auth. `CURRENT_USER_ID` stands in for "the person
-   at the keyboard"; every record the user creates is authored by that id.
-   There is intentionally NO demo/fictional catalog content here any more —
-   the prototype previously shipped seeded demo subjects; those have been
-   removed and existing stored demo records are filtered out on load (see
-   stripDemoRecords).
+   The current user has no auth. `CURRENT_USER_ID` ("me") stands in for "the
+   person at the keyboard"; records the user creates are authored by that id.
+   There is no demo/fictional catalog content: the prototype's seeded demo
+   subjects were removed.
    ------------------------------------------------------------------------- */
 
 export const CURRENT_USER_ID = "me";
@@ -222,96 +219,4 @@ export function subjectMatches(subject: MockSubject, candidate: string): boolean
   return subject.titleAr
     ? normalizeTitle(subject.titleAr) === normalized
     : false;
-}
-
-/* Sessions saved to localStorage may be missing optional fields. Normalize
-   anything loaded from storage back into the current shape (defaulting missing
-   videos and exams to their empty values) so legacy data reads safely, and
-   filter out the (removed) demo records while preserving user-created records. */
-export function normalizeStoredSubjects(raw: unknown): MockSubject[] {
-  if (!Array.isArray(raw)) return [];
-  return stripDemoRecords(
-    raw.map((item) => {
-      const subject = (item ?? {}) as Partial<MockSubject>;
-      const summaries = Array.isArray(subject.summaries)
-        ? subject.summaries.map((summary) => {
-            const videos = (summary as { videos?: unknown })?.videos;
-            return {
-              ...summary,
-              videos: Array.isArray(videos) ? videos : [],
-            };
-          })
-        : [];
-      return {
-        ...subject,
-        summaries,
-        exams: Array.isArray(subject.exams) ? subject.exams : [],
-      } as MockSubject;
-    })
-  );
-}
-
-/* ---- Small unique-id factory (prototype stand-in for DB ids) ------------- */
-
-let counter = 0;
-
-export function makeId(prefix: string) {
-  counter += 1;
-  return `${prefix}-${Date.now().toString(36)}-${counter}`;
-}
-
-/* ---- Demo/fictional record filter ------------------------------------------
-   The original prototype shipped a set of fictional catalog records as its
-   default content. User-created records use ids produced by makeId() (a
-   timestamp+counter suffix), so the demo ids below are structurally distinct
-   and are never generated at runtime. During localStorage hydration we strip
-   exactly these ids so that any real user-created records are preserved while
-   all demo records disappear. Nothing outside these exact ids is removed. */
-
-const DEMO_SUBJECT_IDS = new Set([
-  "networks",
-  "oop",
-  "os",
-  "dld",
-  "phys2",
-]);
-
-const DEMO_SUMMARY_IDS = new Set([
-  "networks-comprehensive",
-  "networks-osi",
-  "networks-chapter1",
-  "networks-qa",
-  "networks-brief",
-  "oop-basics",
-  "os-processes",
-  "dld-gates",
-  "dl-gates-cheat",
-  "phys2-ef-formula",
-  "phys2-circuits-notes",
-]);
-
-const DEMO_EXAM_IDS = new Set([
-  "networks-midterm-1",
-  "networks-final-1",
-]);
-
-/* Remove demo subjects entirely, and remove demo summaries/exams from any
-   subject that remains. Subjects/summaries/exams with any other id are kept. */
-export function stripDemoRecords(subjects: MockSubject[]): MockSubject[] {
-  return subjects
-    .filter((s) => !DEMO_SUBJECT_IDS.has(s.id))
-    .map((s) => ({
-      ...s,
-      summaries: s.summaries.filter((m) => !DEMO_SUMMARY_IDS.has(m.id)),
-      exams: s.exams.filter((e) => !DEMO_EXAM_IDS.has(e.id)),
-    }));
-}
-
-/* ---- Seed data --------------------------------------------------------------
-   Exposed only so server-side metadata lookups (summaries/* pages) keep a
-   stable function signature. The catalog itself now starts EMPTY — the
-   content store no longer seeds demo content, and any demo records already
-   saved to localStorage are filtered out on load via stripDemoRecords(). */
-export function seedContributorData() {
-  return { subjects: [] as MockSubject[], activities: [] as ActivityEvent[] };
 }
