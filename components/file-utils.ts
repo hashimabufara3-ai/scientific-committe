@@ -84,15 +84,22 @@ export async function openResource(
   return true;
 }
 
-/* Trigger a browser download of a stored resource using its signed URL.
-   Returns true when a URL was obtained and a download was started. */
+/* Trigger a browser download of a stored resource via the SAME-ORIGIN
+   download endpoint.
+
+   A cross-origin signed URL cannot drive a download here: browsers ignore the
+   `download` attribute for cross-origin URLs, so an <a> pointed at the
+   Supabase URL would navigate the current tab to the file and leave the page.
+   The /api/resources/download endpoint stream-wraps the bytes with
+   Content-Disposition: attachment on this same origin, so clicking the anchor
+   below saves the file (with the server-derived filename) and keeps the user
+   on the current /summaries page. Returns true when a download was started. */
 export async function downloadResource(
   kind: "summary" | "exam",
   id: string,
   fileName: string
 ): Promise<boolean> {
-  const url = await fetchResourceAccess(kind, id);
-  if (!url) return false;
+  const url = `/api/resources/download?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`;
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = fileName || "file";

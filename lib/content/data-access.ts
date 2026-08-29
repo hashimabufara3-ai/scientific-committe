@@ -211,6 +211,56 @@ export async function getSummary(
   return summary ? rowToSummary(summary) : null;
 }
 
+/* A server-side reference to an ACTIVE resource's stored object, resolved by
+   the same RLS-guarded public client used everywhere else. The download route
+   reads these fields (never a client-minted URL) to fetch bytes server-side. */
+export type ResourceStorageRef = {
+  kind: "summary" | "exam";
+  storagePath: string;
+  fileName: string;
+  mimeType: string | null;
+};
+
+/* Resolve an active summary/exam row to its stored object reference (path +
+   original filename + content type). Returns null when the row is missing,
+   inactive, or has no stored object. Used by the same-origin download endpoint
+   so callers can fetch bytes server-side and stream them back as an attachment
+   (the browser never sees Storage credentials or a signed URL). */
+export async function getResourceStorageRef(
+  kind: "summary" | "exam",
+  id: string
+): Promise<ResourceStorageRef | null> {
+  if (kind === "summary") {
+    const { data, error } = await createAnonClient()
+      .from("summaries")
+      .select("storage_path, file_name, mime_type")
+      .eq("id", id)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (error || !data?.storage_path) return null;
+    return {
+      kind,
+      storagePath: data.storage_path,
+      fileName: data.file_name ?? "download",
+      mimeType: data.mime_type,
+    };
+  }
+
+  const { data, error } = await createAnonClient()
+    .from("exam_files")
+    .select("storage_path, file_name, mime_type")
+    .eq("id", id)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (error || !data?.storage_path) return null;
+  return {
+    kind,
+    storagePath: data.storage_path,
+    fileName: data.file_name ?? "download",
+    mimeType: data.mime_type,
+  };
+}
+
 /* Generate a short-lived signed URL for a summary's stored file.
    Only called when the student explicitly chooses View/Download. Returns null
    if the summary is an inline (content) entry or has no stored object. */
