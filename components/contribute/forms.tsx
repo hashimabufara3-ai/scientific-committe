@@ -27,17 +27,20 @@ type FormShellProps = {
   onCancel: () => void;
   children: React.ReactNode;
   hint?: string;
+  /* True while an upload/action is running — disables submit (in addition to
+     the dashboard-level guard) so a form cannot be double-submitted. */
+  busy?: boolean;
 };
 
-function FormShell({ t, canSubmit, submitLabel, onCancel, children, hint }: FormShellProps) {
+function FormShell({ t, canSubmit, submitLabel, onCancel, children, hint, busy }: FormShellProps) {
   return (
     <Panel className="p-5">
       <div className="space-y-4">{children}</div>
       <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-4">
         <p className="text-xs text-muted">{hint ?? ""}</p>
         <div className="flex items-center gap-2">
-          <GhostButton onClick={onCancel}>{t.actions.cancel}</GhostButton>
-          <PrimaryButton type="submit" disabled={!canSubmit}>
+          <GhostButton onClick={onCancel} disabled={busy}>{t.actions.cancel}</GhostButton>
+          <PrimaryButton type="submit" disabled={!canSubmit || busy}>
             {submitLabel}
           </PrimaryButton>
         </div>
@@ -48,24 +51,31 @@ function FormShell({ t, canSubmit, submitLabel, onCancel, children, hint }: Form
 
 /* ---- Shared single-file upload -------------------------------------------
    One "choose a file" flow for every contribution type (summary uploads and
-   previous-exam files): a 2 MB cap and base64 data-URL storage, with the
-   result reported up through the onFile callback so each form keeps its own
-   field state. */
+   previous-exam files): a 2 MB cap. The raw browser File is kept (never read
+   as a data URL). The dashboard uploads that native File to Storage via the
+   /api/resources/upload route handler, so only the Storage path + display
+   metadata ever reach the database. */
 
 export type FileState = {
   fileName: string;
-  fileData: string;
+  /* The newly chosen raw File, if the contributor selected one in this
+     session. Null when editing an existing upload without replacing it. */
+  file: File | null;
   fileType: string;
   fileSize: number;
   fileError: string | null;
+  /* True when editing an existing uploaded file that is being kept (no new
+     File chosen yet) — lets the form be submittable with just a fileName. */
+  hasExisting: boolean;
 };
 
 export const emptyFileState = (): FileState => ({
   fileName: "",
-  fileData: "",
+  file: null,
   fileType: "",
   fileSize: 0,
   fileError: null,
+  hasExisting: false,
 });
 
 function FileUploadField({
@@ -111,21 +121,14 @@ function FileUploadField({
             onFile({ ...emptyFileState(), fileError: t.forms.fileTooLarge });
             return;
           }
-          const reader = new FileReader();
-          reader.onload = () => {
-            onFile({
-              fileName: selected.name,
-              fileData:
-                typeof reader.result === "string" ? reader.result : "",
-              fileType: selected.type,
-              fileSize: selected.size,
-              fileError: null,
-            });
-          };
-          reader.onerror = () => {
-            onFile({ ...emptyFileState(), fileError: t.forms.fileReadError });
-          };
-          reader.readAsDataURL(selected);
+          onFile({
+            fileName: selected.name,
+            file: selected,
+            fileType: selected.type,
+            fileSize: selected.size,
+            fileError: null,
+            hasExisting: false,
+          });
         }}
       />
       {file.fileError && (
@@ -147,6 +150,7 @@ export function SubjectForm({
   submitLabel,
   onSubmit,
   onCancel,
+  busy,
 }: {
   t: ContributeDict;
   subjects: MockSubject[];
@@ -155,6 +159,7 @@ export function SubjectForm({
   submitLabel: string;
   onSubmit: (values: SubjectFormValues) => void;
   onCancel: () => void;
+  busy?: boolean;
 }) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const nameId = useId();
@@ -169,7 +174,7 @@ export function SubjectForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (!canSubmit) return;
+        if (!canSubmit || busy) return;
         onSubmit({ title: title.trim() });
       }}
     >
@@ -179,6 +184,7 @@ export function SubjectForm({
         submitLabel={submitLabel}
         onCancel={onCancel}
         hint={t.trustChip}
+        busy={busy}
       >
         <Field label={t.forms.subjectName} required htmlFor={nameId}>
           <TextInput
@@ -222,9 +228,8 @@ type MaterialOption = {
   searchText: string;
 };
 
-/* Prototype upload cap: a data URL is base64 (~+33%) and the whole store is
-   persisted to localStorage (~5 MB), so this keeps a single file safely
-   within the budget while staying honest about the prototype's limits. */
+/* Prototype upload cap (2 MB), preserved from the prototype's budget. The
+   browser sends the raw File via multipart to Storage, which has the same cap. */
 const MAX_FILE_BYTES = 2 * 1024 * 1024;
 
 export function SummaryForm({
@@ -236,6 +241,7 @@ export function SummaryForm({
   submitLabel,
   onSubmit,
   onCancel,
+  busy,
 }: {
   t: ContributeDict;
   lang: string;
@@ -249,7 +255,9 @@ export function SummaryForm({
   submitLabel: string;
   onSubmit: (subjectRef: SubjectRef, values: SummaryFormValues) => void;
   onCancel: () => void;
+  busy?: boolean;
 }) {
+  const isEditing = Boolean(initial);
   const fixedSubject = fixedSubjectId
     ? subjects.find((s) => s.id === fixedSubjectId)
     : undefined;
@@ -280,11 +288,15 @@ export function SummaryForm({
   const [newSubjectTitle, setNewSubjectTitle] = useState("");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [source, setSource] = useState<"upload" | "content">(initial?.source ?? "content");
-  const [fileName, setFileName] = useState(initial?.fileName ?? "");
-  const [fileData, setFileData] = useState(initial?.fileData ?? "");
-  const [fileType, setFileType] = useState(initial?.fileType ?? "");
-  const [fileSize, setFileSize] = useState(initial?.fileSize ?? 0);
-  const [fileError, setFileError] = useState<string | null>(null);
+  const [file, setFile] = useState<FileState>(() => ({
+    fileName: initial?.fileName ?? "",
+    file: null,
+    fileType: initial?.fileType ?? "",
+    fileSize: initial?.fileSize ?? 0,
+    fileError: null,
+    hasExisting:
+      initial?.source === "upload" && Boolean(initial?.fileName),
+  }));
   const [content, setContent] = useState(initial?.content ?? "");
   const [videos, setVideos] = useState<string[]>(
     initial?.videos?.length ? initial.videos : [""]
@@ -311,9 +323,12 @@ export function SummaryForm({
       : undefined;
   const duplicate = storeDuplicate !== undefined;
 
+  /* Upload source needs the file either newly chosen (create / replace) or
+     already present and kept (editing metadata only). Content needs text. */
   const hasSource =
     source === "upload"
-      ? fileName.trim().length > 0 && fileData.length > 0
+      ? file.fileName.trim().length > 0 &&
+        Boolean(isEditing ? file.file || file.hasExisting : file.file)
       : content.trim().length > 0;
   const hasSubject = fixedSubject
     ? true
@@ -321,14 +336,14 @@ export function SummaryForm({
       ? selectedKey.length > 0
       : newSubjectTitle.trim().length > 0;
   const canSubmit =
-    title.trim().length > 0 && hasSource && hasSubject && !duplicate && !fileError;
+    title.trim().length > 0 && hasSource && hasSubject && !duplicate && !file.fileError;
 
   /* Whether an optional previous exam was attached (only meaningful when
      creating a NEW subject). The exam is entirely optional and never gates
      publishing. A failed exam upload is ignored rather than blocking. */
   const hasExam =
     examFile.fileName.trim().length > 0 &&
-    examFile.fileData.length > 0 &&
+    Boolean(examFile.file) &&
     !examFile.fileError;
 
   const setVideo = (index: number, value: string) =>
@@ -348,7 +363,7 @@ export function SummaryForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (!canSubmit) return;
+        if (!canSubmit || busy) return;
         const subjectRef: SubjectRef = fixedSubject
           ? { subjectId: fixedSubject.id }
           : mode === "existing" && selectedMaterial
@@ -357,10 +372,10 @@ export function SummaryForm({
         onSubmit(subjectRef, {
           title: title.trim(),
           source,
-          fileName: fileName.trim(),
-          fileData: fileData.length > 0 ? fileData : undefined,
-          fileType: fileType || undefined,
-          fileSize: fileSize > 0 ? fileSize : undefined,
+          file: file.file ?? undefined,
+          fileName: file.fileName.trim(),
+          fileType: file.fileType || undefined,
+          fileSize: file.fileSize > 0 ? file.fileSize : undefined,
           content: content.trim(),
           videos: videos.map((v) => v.trim()).filter((v) => v.length > 0),
           exam: hasExam
@@ -368,8 +383,8 @@ export function SummaryForm({
                 type: examType,
                 year: examYearUnknown ? "" : examYear,
                 semester: examSemester,
+                file: examFile.file ?? undefined,
                 fileName: examFile.fileName.trim(),
-                fileData: examFile.fileData.length > 0 ? examFile.fileData : undefined,
                 fileType: examFile.fileType || undefined,
                 fileSize: examFile.fileSize > 0 ? examFile.fileSize : undefined,
               }
@@ -383,6 +398,7 @@ export function SummaryForm({
         submitLabel={submitLabel}
         onCancel={onCancel}
         hint={t.forms.summaryHint}
+        busy={busy}
       >
         {/* Subject — fixed when opened from a subject workspace: rendered as
             read-only context, never as a picker. Otherwise the contributor
@@ -583,14 +599,8 @@ export function SummaryForm({
           <FileUploadField
             t={t}
             inputId={fileInputId}
-            file={{ fileName, fileData, fileType, fileSize, fileError }}
-            onFile={(f) => {
-              setFileName(f.fileName);
-              setFileData(f.fileData);
-              setFileType(f.fileType);
-              setFileSize(f.fileSize);
-              setFileError(f.fileError);
-            }}
+            file={file}
+            onFile={setFile}
           />
         )}
 
@@ -756,13 +766,16 @@ export function ExamForm({
   submitLabel,
   onSubmit,
   onCancel,
+  busy,
 }: {
   t: ContributeDict;
   initial?: Partial<ExamFormValues>;
   submitLabel: string;
   onSubmit: (values: ExamFormValues) => void;
   onCancel: () => void;
+  busy?: boolean;
 }) {
+  const isEditing = Boolean(initial);
   const [type, setType] = useState<ExamType>(initial?.type ?? "midterm");
   const [year, setYear] = useState(initial?.year ?? "");
   /* Year is optional: left empty it stores as unknown. The checkbox is an
@@ -773,17 +786,22 @@ export function ExamForm({
   );
   const [file, setFile] = useState<FileState>(() => ({
     fileName: initial?.fileName ?? "",
-    fileData: initial?.fileData ?? "",
+    file: null,
     fileType: initial?.fileType ?? "",
     fileSize: initial?.fileSize ?? 0,
     fileError: null,
+    hasExisting: Boolean(initial?.fileName),
   }));
 
   const yearId = useId();
   const semesterId = useId();
   const fileInputId = useId();
 
-  const hasFile = file.fileName.trim().length > 0 && file.fileData.length > 0;
+  /* A valid exam contribution has a file: either newly chosen, or the existing
+     one being kept (editing metadata only). */
+  const hasFile =
+    file.fileName.trim().length > 0 &&
+    Boolean(isEditing ? file.file || file.hasExisting : file.file);
   const canSubmit = hasFile && !file.fileError;
 
   const typeOptionClass = (selected: boolean) =>
@@ -797,13 +815,13 @@ export function ExamForm({
     <form
       onSubmit={(e) => {
         e.preventDefault();
-        if (!canSubmit) return;
+        if (!canSubmit || busy) return;
         onSubmit({
           type,
           year: yearUnknown ? "" : year,
           semester,
+          file: file.file ?? undefined,
           fileName: file.fileName.trim(),
-          fileData: file.fileData.length > 0 ? file.fileData : undefined,
           fileType: file.fileType || undefined,
           fileSize: file.fileSize > 0 ? file.fileSize : undefined,
         });
@@ -815,6 +833,7 @@ export function ExamForm({
         submitLabel={submitLabel}
         onCancel={onCancel}
         hint={t.forms.examHint}
+        busy={busy}
       >
         {/* Type — midterm or final */}
         <fieldset>

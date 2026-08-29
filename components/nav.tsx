@@ -48,7 +48,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
 
   const links = [
     { href: `/${lang}`, label: dict.home, exact: true },
-    { href: `/${lang}/resources`, label: dict.resources },
+    { href: `/${lang}/summaries`, label: dict.resources },
     ...(isContributor
       ? [{ href: `/${lang}/contribute`, label: dict.contribute }]
       : []),

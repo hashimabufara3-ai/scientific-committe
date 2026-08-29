@@ -1,20 +1,16 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDictionary, hasLocale } from "../../../dictionaries";
+import { getSubject, getSummary } from "../../../../../lib/content/data-access";
+import { displayName } from "../../../../../lib/content/mock-contributor-data";
 import SummaryDetail from "../../../../../components/summary-detail";
-import {
-  displayName,
-  seedContributorData,
-} from "../../../../../lib/content/mock-contributor-data";
 
 export async function generateMetadata({
   params,
-}: PageProps<"/[lang]/resources/[id]/[summaryId]">): Promise<Metadata> {
+}: PageProps<"/[lang]/summaries/[id]/[summaryId]">): Promise<Metadata> {
   const { lang, id, summaryId } = await params;
   if (!hasLocale(lang)) return {};
-  const subject = seedContributorData().subjects.find((s) => s.id === id);
-  if (!subject) return {};
-  const summary = subject.summaries.find((s) => s.id === summaryId);
+  const summary = await getSummary(id, summaryId);
   if (!summary) return {};
   return {
     title: displayName(summary.title, summary.titleAr, lang),
@@ -28,10 +24,20 @@ export async function generateMetadata({
 
 export default async function SummaryDetailPage({
   params,
-}: PageProps<"/[lang]/resources/[id]/[summaryId]">) {
+}: PageProps<"/[lang]/summaries/[id]/[summaryId]">) {
   const { lang, id, summaryId } = await params;
   if (!hasLocale(lang)) notFound();
   const dict = await getDictionary(lang);
+
+  const subject = await getSubject(id);
+  const summary = await getSummary(id, summaryId);
+  if (!subject || !summary) notFound();
+
+  const categoryLabel =
+    dict.resourcesPage.categories.find((c) => c.id === subject.category)
+      ?.label ??
+    subject.category ??
+    "general";
 
   const contributions = {
     kicker: dict.resourcesPage.detail.files,
@@ -50,9 +56,9 @@ export default async function SummaryDetailPage({
   return (
     <SummaryDetail
       lang={lang}
-      urlId={id}
-      summaryId={summaryId}
-      categories={dict.resourcesPage.categories}
+      subject={subject}
+      summary={summary}
+      categoryLabel={categoryLabel}
       strings={{
         navResources: dict.nav.resources,
         backToSubject: dict.resourcesPage.detail.backToSubject,

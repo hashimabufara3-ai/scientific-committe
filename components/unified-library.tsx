@@ -6,13 +6,12 @@ import Link from "next/link";
 import ResourceStage from "./resource-stage";
 import type { StageItem } from "./resource-stage";
 import { SearchIcon } from "./icons";
-import { useContentStore } from "@/lib/content/content-store";
 import {
   displayName,
   subjectChildCounts,
   subjectSearchText,
-  visibleSubjects,
 } from "@/lib/content/mock-contributor-data";
+import type { MockSubject } from "@/lib/content/mock-contributor-data";
 
 type Category = { id: string; label: string };
 
@@ -46,19 +45,20 @@ export type LibraryGridStrings = {
    search matches the same bilingual names the Contribute selector matches, so
    the two pages always agree. */
 export default function UnifiedLibrary({
+  subjects,
   categories,
   stageStrings,
   libraryStrings,
   lang,
   children,
 }: {
+  subjects: MockSubject[];
   categories: Category[];
   stageStrings: StageStrings;
   libraryStrings: LibraryGridStrings;
   lang: string;
   children?: ReactNode;
 }) {
-  const subjects = visibleSubjects(useContentStore());
   const [searchQuery, setSearchQuery] = useState("");
 
   const filteredItems = useMemo<StageItem[]>(() => {

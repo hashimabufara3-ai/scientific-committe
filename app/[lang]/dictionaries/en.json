@@ -130,6 +130,14 @@
       "updated": "Changes saved",
       "deleted": "Deleted"
     },
+    "errors": {
+      "generic": "Something went wrong. Please try again.",
+      "notAllowed": "You're not allowed to do that.",
+      "notFound": "That item could not be found.",
+      "validation": "Please check your input and try again.",
+      "upload": "The file could not be uploaded. Please try again.",
+      "uploadMissing": "Please choose a file to upload."
+    },
     "actions": {
       "addSummary": "Add summary",
       "addExam": "Add previous exam",
@@ -275,6 +283,7 @@
     "kicker": "Summaries",
     "title": "Summaries",
     "subtitle": "Student-made summaries, cheat sheets, and guides — organized by subject so you can find what you need fast.",
+    "addSummary": "Add Summary",
     "categories": [
       {
         "id": "all",
@@ -316,7 +325,7 @@
       "title": "All materials",
       "subtitle": "Every material in one place.",
       "open": "Open material",
-      "empty": "No materials yet.",
+      "empty": "No summaries yet.",
       "emptyHint": "Student-made summaries, exam papers, and study guides will appear here as contributors publish them.",
       "emptyAction": "Contact the committee",
       "search": "Search materials...",

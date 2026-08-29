@@ -1,16 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { useMemo } from "react";
-import { useContentStore, useHydrated } from "@/lib/content/content-store";
 import {
   authorName,
   displayName,
   isOwnedByMe,
-  visibleSubjects,
-  visibleSummaries,
 } from "@/lib/content/mock-contributor-data";
+import type { MockSubject, MockSummary } from "@/lib/content/mock-contributor-data";
 import Reveal from "./reveal";
 import SectionHeading from "./section-heading";
 import { ArrowRightIcon, DownloadIcon, ExternalLinkIcon } from "./icons";
@@ -19,8 +16,6 @@ import type {
   ContributorFile,
   MaterialContributionsStrings,
 } from "./material-contributions";
-import { findStoreSubject } from "./material-detail";
-import type { Category } from "./material-detail";
 
 export type SummaryDetailStrings = {
   navResources: string;
@@ -36,108 +31,76 @@ export type SummaryDetailStrings = {
   contributions: MaterialContributionsStrings;
 };
 
+/* Public summary detail page. `subject` and `summary` are the server-resolved
+   active rows (metadata only, via getSubject/getSummary), passed down from the
+   page — the component no longer reads the browser content store. A missing /
+   inactive summary is handled by the page (notFound) before rendering. */
 export default function SummaryDetail({
   lang,
-  urlId,
-  summaryId,
-  categories,
+  subject,
+  summary,
+  categoryLabel,
   strings,
 }: {
   lang: string;
-  urlId: string;
-  summaryId: string;
-  categories: Category[];
+  subject: MockSubject;
+  summary: MockSummary;
+  categoryLabel?: string;
   strings: SummaryDetailStrings;
 }) {
-  const subjects = visibleSubjects(useContentStore());
-  const hydrated = useHydrated();
-
-  const storeSubject = useMemo(
-    () => findStoreSubject(subjects, urlId),
-    [subjects, urlId],
-  );
-
-  const storeSummary = useMemo(
-    () =>
-      storeSubject
-        ? visibleSummaries(storeSubject).find((s) => s.id === summaryId) ??
-          null
-        : null,
-    [storeSubject, summaryId],
-  );
-
-  const videoUrls = useMemo(
-    () => (storeSummary ? storeSummary.videos : []),
-    [storeSummary],
-  );
+  const videoUrls = useMemo(() => summary.videos ?? [], [summary]);
   const youtubeTitles = useYouTubeTitles(videoUrls);
 
-  /* Store content only exists in the browser session: hold a plain shell until
-     the store has hydrated, then 404 for ids that resolve to nothing. */
-  if (hydrated && !storeSummary) notFound();
+  const subjectTitle = displayName(subject.title, subject.titleAr, lang);
 
-  const subjectTitle = storeSubject
-    ? displayName(storeSubject.title, storeSubject.titleAr, lang)
-    : "";
-  const categoryLabel =
-    storeSubject &&
-    (categories.find((c) => c.id === storeSubject.category)?.label ??
-      storeSubject.category ??
-      "general");
-
-  if (!storeSummary) {
-    return <main id="main-content" className="mx-auto max-w-4xl px-4 pb-24 sm:px-6" />;
-  }
-
-  const title = displayName(storeSummary.title, storeSummary.titleAr, lang);
+  const title = displayName(summary.title, summary.titleAr, lang);
   const description =
-    storeSummary.description ??
-    (storeSummary.source === "content" && storeSummary.content
-      ? storeSummary.content.split("\n")[0]
+    summary.description ??
+    (summary.source === "content" && summary.content
+      ? summary.content.split("\n")[0]
       : undefined);
 
+  /* An uploaded file (production: fetched via a signed URL through `access`). */
   const file: ContributorFile | null =
-    storeSummary.source === "upload" &&
-    storeSummary.fileName &&
-    storeSummary.fileData
+    summary.source === "upload" && summary.fileName
       ? {
-          id: `${storeSummary.id}-${storeSummary.fileName}`,
-          title: storeSummary.title,
-          fileName: storeSummary.fileName,
-          fileData: storeSummary.fileData,
-          fileType: storeSummary.fileType,
-          fileSize: storeSummary.fileSize,
-          owner: isOwnedByMe(storeSummary.authorId)
+          id: `${summary.id}-${summary.fileName}`,
+          title: summary.title,
+          fileName: summary.fileName,
+          access: summary.access,
+          fileType: summary.fileType,
+          fileSize: summary.fileSize,
+          owner: isOwnedByMe(summary.authorId)
             ? strings.contributions.you
-            : authorName(storeSummary.authorId, lang as "en" | "ar"),
+            : authorName(summary.authorId, lang as "en" | "ar"),
         }
       : null;
 
   /* A static (committee) file reference — the bytes live at fileUrl, so the
      row shows the file name and metadata with a working View link. */
   const legacyFile =
-    storeSummary.source === "upload" &&
-    storeSummary.fileName &&
-    storeSummary.fileUrl &&
-    !storeSummary.fileData
+    summary.source === "upload" &&
+    summary.fileName &&
+    summary.fileUrl &&
+    !summary.access
       ? {
-          id: `${storeSummary.id}-${storeSummary.fileName}`,
-          fileName: storeSummary.fileName,
-          fileUrl: storeSummary.fileUrl,
-          fileType: storeSummary.fileType,
-          sizeLabel: storeSummary.fileSizeLabel,
-          pages: storeSummary.pages,
+          id: `${summary.id}-${summary.fileName}`,
+          fileName: summary.fileName,
+          fileUrl: summary.fileUrl,
+          fileType: summary.fileType,
+          sizeLabel: summary.fileSizeLabel,
+          pages: summary.pages,
         }
       : null;
 
-  const externalResources = storeSummary.externalResources ?? [];
+  const externalResources = summary.externalResources ?? [];
 
   return (
     <main id="main-content" className="mx-auto max-w-4xl px-4 pb-24 sm:px-6">
       <Reveal>
         <nav className="pt-20 sm:pt-28" aria-label={strings.navResources}>
           <Link
-            href={`/${lang}/resources/${urlId}`}
+            href={`/${lang}/summaries/${subject.id}`}
             className="inline-flex items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-accent"
           >
             <ArrowRightIcon className="h-4 w-4 rotate-180 rtl-flip" />
@@ -169,7 +132,7 @@ export default function SummaryDetail({
         </header>
       </Reveal>
 
-      {storeSummary.source === "content" && storeSummary.content && (
+      {summary.source === "content" && summary.content && (
         <section className="mt-20" aria-label={strings.files}>
           <Reveal>
             <SectionHeading
@@ -180,7 +143,7 @@ export default function SummaryDetail({
           </Reveal>
           <Reveal delay={0.05}>
             <div className="mt-8 whitespace-pre-wrap rounded-xl border border-white/10 bg-white/[0.03] p-6 text-base leading-relaxed text-foreground">
-              {storeSummary.content}
+              {summary.content}
             </div>
           </Reveal>
         </section>
@@ -242,8 +205,7 @@ export default function SummaryDetail({
         </section>
       )}
 
-      {(externalResources.length > 0 ||
-        (storeSummary && storeSummary.videos.length > 0)) && (
+      {(externalResources.length > 0 || videoUrls.length > 0) && (
         <section
           className="mt-20"
           aria-label={strings.externalResources}
@@ -281,7 +243,7 @@ export default function SummaryDetail({
                 </Link>
               </Reveal>
             ))}
-            {storeSummary?.videos.map((url, index) => (
+            {videoUrls.map((url, index) => (
               <Reveal key={url} delay={((externalResources.length + index) % 3) * 0.07}>
                 <Link
                   href={url}

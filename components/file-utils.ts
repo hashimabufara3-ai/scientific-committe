@@ -2,7 +2,14 @@
 
 /* Shared helpers for files persisted in the content store — uploaded bytes as
    a data URL (fileData) or a static reference (fileUrl). Used by the public
-   file cards and the Previous Exams section so both render files identically. */
+   file cards and the Previous Exams section so both render files identically.
+
+   Production (Postgres + Supabase Storage) files have NO base64 fileData. They
+   are referenced by kind+id and fetched on demand as a short-lived signed URL
+   from /api/resources/access (server validates the row is active, then mints
+   the URL — the response carries only the URL, never Storage credentials or
+   bytes). These helpers transparently prefer the signed-URL path; the legacy
+   fileData/fileUrl path remains intact (and unused) for the prototype. */
 
 export function fileSizeLabel(bytes?: number) {
   if (!bytes || bytes <= 0) return "";
@@ -38,4 +45,59 @@ export function openFileInTab(fileData: string) {
     /* non-binary or unusual data URL — fall back to the raw href */
     window.open(fileData, "_blank", "noopener");
   }
+}
+
+/* ---------------------------------------------------------------------------
+   Signed-URL access (production path).
+
+   A resource is addressed by kind ("summary" | "exam") + id. The browser
+   fetches a short-lived signed URL from the access route only when the user
+   explicitly chooses View or Download, so file bytes and Storage credentials
+   never reach the client until that moment.
+   --------------------------------------------------------------------------- */
+
+export async function fetchResourceAccess(
+  kind: "summary" | "exam",
+  id: string
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `/api/resources/access?kind=${encodeURIComponent(kind)}&id=${encodeURIComponent(id)}`
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as { url?: string };
+    return typeof data.url === "string" && data.url ? data.url : null;
+  } catch {
+    return null;
+  }
+}
+
+/* Open a stored resource in a new tab (View). Returns true when a URL was
+   obtained and a new tab was opened. */
+export async function openResource(
+  kind: "summary" | "exam",
+  id: string
+): Promise<boolean> {
+  const url = await fetchResourceAccess(kind, id);
+  if (!url) return false;
+  window.open(url, "_blank", "noopener");
+  return true;
+}
+
+/* Trigger a browser download of a stored resource using its signed URL.
+   Returns true when a URL was obtained and a download was started. */
+export async function downloadResource(
+  kind: "summary" | "exam",
+  id: string,
+  fileName: string
+): Promise<boolean> {
+  const url = await fetchResourceAccess(kind, id);
+  if (!url) return false;
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = fileName || "file";
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  return true;
 }

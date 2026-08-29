@@ -1,12 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { notFound } from "next/navigation";
 import { useMemo } from "react";
-import { useContentStore, useHydrated } from "@/lib/content/content-store";
 import {
   displayName,
-  visibleSubjects,
   visibleSummaries,
 } from "@/lib/content/mock-contributor-data";
 import type { MockSubject } from "@/lib/content/mock-contributor-data";
@@ -18,16 +15,6 @@ import { ArrowRightIcon } from "./icons";
 
 export type Category = { id: string; label: string };
 
-/* The store subject behind a material URL — resolved by the canonical
-   material id, the same id used by the Contribute selector, the contributor
-   submissions, and the Summaries card. */
-export function findStoreSubject(
-  subjects: MockSubject[],
-  urlId: string,
-): MockSubject | undefined {
-  return subjects.find((s) => s.id === urlId);
-}
-
 export type MaterialDetailStrings = {
   navResources: string;
   back: string;
@@ -37,53 +24,40 @@ export type MaterialDetailStrings = {
   exams: PreviousExamsStrings;
 };
 
+/* Public material detail page. `subject` is the server-resolved active catalog
+   row (metadata only, via getSubject), passed down from the page — the
+   component no longer reads the browser content store. A missing/inactive
+   subject is handled by the page (notFound) before rendering. */
 export default function MaterialDetail({
   lang,
-  urlId,
+  subject,
   categories,
   strings,
 }: {
   lang: string;
-  urlId: string;
+  subject: MockSubject;
   categories: Category[];
   strings: MaterialDetailStrings;
 }) {
-  const subjects = visibleSubjects(useContentStore());
-  const hydrated = useHydrated();
-
-  const storeSubject = useMemo(
-    () => findStoreSubject(subjects, urlId),
-    [subjects, urlId],
-  );
-
   const summaries = useMemo(
     () =>
-      storeSubject
-        ? visibleSummaries(storeSubject).map((s) => ({
-            id: s.id,
-            title: displayName(s.title, s.titleAr, lang),
-            description: s.description
-              ? s.description
-              : s.content
-                ? s.content.split("\n")[0]
-                : "",
-            href: `/${lang}/resources/${storeSubject.id}/${s.id}`,
-          }))
-        : [],
-    [storeSubject, lang],
+      visibleSummaries(subject).map((s) => ({
+        id: s.id,
+        title: displayName(s.title, s.titleAr, lang),
+        description: s.description
+          ? s.description
+          : s.content
+            ? s.content.split("\n")[0]
+            : "",
+        href: `/${lang}/summaries/${subject.id}/${s.id}`,
+      })),
+    [subject, lang],
   );
 
-  /* Store content only exists in the browser session: hold a plain shell until
-     the store has hydrated, then 404 for ids that resolve to nothing. */
-  if (hydrated && !storeSubject) notFound();
-  if (!storeSubject) {
-    return <main id="main-content" className="mx-auto max-w-4xl px-4 pb-24 sm:px-6" />;
-  }
-
-  const title = displayName(storeSubject.title, storeSubject.titleAr, lang);
+  const title = displayName(subject.title, subject.titleAr, lang);
   const categoryLabel =
-    categories.find((c) => c.id === storeSubject.category)?.label ??
-    storeSubject.category ??
+    categories.find((c) => c.id === subject.category)?.label ??
+    subject.category ??
     "general";
 
   return (
@@ -91,7 +65,7 @@ export default function MaterialDetail({
       <Reveal>
         <nav className="pt-20 sm:pt-28" aria-label={strings.navResources}>
           <Link
-            href={`/${lang}/resources`}
+            href={`/${lang}/summaries`}
             className="inline-flex items-center gap-2 text-sm font-medium text-muted transition-colors hover:text-accent"
           >
             <ArrowRightIcon className="h-4 w-4 rotate-180 rtl-flip" />
@@ -153,7 +127,7 @@ export default function MaterialDetail({
         </section>
       )}
 
-      <PreviousExamsSection subject={storeSubject} strings={strings.exams} />
+      <PreviousExamsSection subject={subject} strings={strings.exams} />
     </main>
   );
 }

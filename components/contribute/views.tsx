@@ -3,10 +3,9 @@
 import Link from "next/link";
 import type { KeyboardEvent as ReactKeyboardEvent, ReactNode } from "react";
 import {
-  isOwnedByMe,
-  subjectChildCounts,
   authorName,
   displayName,
+  subjectChildCounts,
   visibleExams,
   visibleSummaries,
 } from "@/lib/content/mock-contributor-data";
@@ -59,6 +58,11 @@ import type {
 export type Api = {
   lang: string;
   t: ContributeDict;
+  /* The authenticated, server-resolved id of the signed-in contributor. Used
+     for ownership gating instead of the mock "me" constant. */
+  currentUserId: string;
+  /* True while an upload / server action is running (disables submits). */
+  busy: boolean;
   now: number;
   view: View;
   subjects: MockSubject[];
@@ -127,8 +131,19 @@ function timeAgo(ts: number, now: number, t: ContributeDict) {
   return fmt(t.activity.time.days, { n: days });
 }
 
-function ownerName(authorId: string, lang: string, t: ContributeDict) {
-  return isOwnedByMe(authorId) ? t.you : authorName(authorId, lang as "en" | "ar");
+function isOwned(authorId: string | undefined, currentUserId: string): boolean {
+  return Boolean(authorId && authorId === currentUserId);
+}
+
+function ownerName(
+  authorId: string,
+  lang: string,
+  t: ContributeDict,
+  currentUserId: string
+) {
+  return isOwned(authorId, currentUserId)
+    ? t.you
+    : authorName(authorId, lang as "en" | "ar");
 }
 
 /* Edit / delete for content the current contributor owns. stopPropagation is
@@ -248,7 +263,7 @@ function ContributorHeader({ t, lang }: { t: ContributeDict; lang: string }) {
           {t.trustChip}
         </span>
         <Link
-          href={`/${lang}/resources`}
+          href={`/${lang}/summaries`}
           className="inline-flex items-center gap-1.5 rounded-full border border-white/10 bg-white/[0.03] px-3 py-1 text-xs font-medium text-muted transition-colors hover:border-accent/40 hover:text-accent"
         >
           {t.viewPublic}
@@ -330,7 +345,7 @@ function ActivityFeed({
 
 function SubjectCard({ subject, api }: { subject: MockSubject; api: Api }) {
   const { t, lang } = api;
-  const owned = isOwnedByMe(subject.authorId);
+  const owned = isOwned(subject.authorId, api.currentUserId);
   const counts = subjectChildCounts(subject);
   const open = () => api.onOpenSubject(subject.id);
   const del = () =>
@@ -371,7 +386,7 @@ function SubjectCard({ subject, api }: { subject: MockSubject; api: Api }) {
         </div>
       </Pressable>
       <p className="mt-3 border-t border-white/10 pt-3 text-xs text-muted">
-        {fmt(t.workspace.addedBy, { name: ownerName(subject.authorId, lang, t) })}
+        {fmt(t.workspace.addedBy, { name: ownerName(subject.authorId, lang, t, api.currentUserId) })}
       </p>
     </Panel>
   );
@@ -449,6 +464,7 @@ function DashboardView({ api }: { api: Api }) {
             submitLabel={t.actions.publish}
             onSubmit={api.onCreateSummary}
             onCancel={() => api.onToggleForm(null)}
+            busy={api.busy}
           />
         </div>
       )}
@@ -497,16 +513,16 @@ function MyContributions({ api }: { api: Api }) {
     exam?: MockExam;
   }[] = [];
   for (const subject of subjects) {
-    if (isOwnedByMe(subject.authorId)) {
+    if (isOwned(subject.authorId, api.currentUserId)) {
       items.push({ key: `subject-${subject.id}`, kind: "subject", subject });
     }
     for (const summary of visibleSummaries(subject)) {
-      if (isOwnedByMe(summary.authorId)) {
+      if (isOwned(summary.authorId, api.currentUserId)) {
         items.push({ key: `summary-${summary.id}`, kind: "summary", subject, summary });
       }
     }
     for (const exam of visibleExams(subject)) {
-      if (isOwnedByMe(exam.authorId)) {
+      if (isOwned(exam.authorId, api.currentUserId)) {
         items.push({ key: `exam-${exam.id}`, kind: "exam", subject, exam });
       }
     }
@@ -568,7 +584,7 @@ function MyContributions({ api }: { api: Api }) {
                   </p>
                 </div>
                 <span className="text-xs text-muted">
-                  {fmt(t.workspace.addedBy, { name: ownerName(item.subject.authorId, lang, t) })}
+                  {fmt(t.workspace.addedBy, { name: ownerName(item.subject.authorId, lang, t, api.currentUserId) })}
                 </span>
               </li>
             );
@@ -603,6 +619,7 @@ function SummaryEditInline({
           api.onSaveSummary(subjectId, initial.id, values)
         }
         onCancel={api.onCancelEdit}
+        busy={api.busy}
       />
     </div>
   );
@@ -612,7 +629,7 @@ function SummaryEditInline({
 
 function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) {
   const { t, lang } = api;
-  const owned = isOwnedByMe(subject.authorId);
+  const owned = isOwned(subject.authorId, api.currentUserId);
   const counts = subjectChildCounts(subject);
   const summaries = visibleSummaries(subject);
   const exams = visibleExams(subject);
@@ -635,7 +652,7 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
             {displayName(subject.title, subject.titleAr, lang)}
           </h1>
           <p className="mt-3 text-sm text-muted">
-            {fmt(t.workspace.addedBy, { name: ownerName(subject.authorId, lang, t) })}
+            {fmt(t.workspace.addedBy, { name: ownerName(subject.authorId, lang, t, api.currentUserId) })}
           </p>
         </div>
         {owned && (
@@ -672,6 +689,7 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
             submitLabel={t.actions.save}
             onSubmit={(values) => api.onSaveSubject(subject.id, values)}
             onCancel={api.onCancelEdit}
+            busy={api.busy}
           />
         </div>
       )}
@@ -708,6 +726,7 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
             submitLabel={t.actions.publish}
             onSubmit={api.onCreateSummary}
             onCancel={() => api.onToggleForm(null)}
+            busy={api.busy}
           />
         </div>
       )}
@@ -719,6 +738,7 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
             submitLabel={t.actions.publish}
             onSubmit={(values) => api.onCreateExam(subject.id, values)}
             onCancel={() => api.onToggleForm(null)}
+            busy={api.busy}
           />
         </div>
       )}
@@ -765,7 +785,7 @@ function SummaryRow({
   api: Api;
 }) {
   const { t, lang } = api;
-  const owned = isOwnedByMe(summary.authorId);
+  const owned = isOwned(summary.authorId, api.currentUserId);
   const isEditing = api.editing?.kind === "summary" && api.editing.id === summary.id;
 
   return (
@@ -776,7 +796,7 @@ function SummaryRow({
             {displayName(summary.title, summary.titleAr, lang)}
           </h3>
           <p className="mt-1 text-xs text-muted">
-            {fmt(t.workspace.addedBy, { name: ownerName(summary.authorId, lang, t) })}
+            {fmt(t.workspace.addedBy, { name: ownerName(summary.authorId, lang, t, api.currentUserId) })}
             {summary.source === "upload" && (
               <>
                 <span className="mx-1 text-muted/40">·</span>
@@ -850,7 +870,7 @@ function ExamRow({
   api: Api;
 }) {
   const { t, lang } = api;
-  const owned = isOwnedByMe(exam.authorId);
+  const owned = isOwned(exam.authorId, api.currentUserId);
   const isEditing = api.editing?.kind === "exam" && api.editing.id === exam.id;
 
   return (
@@ -885,7 +905,7 @@ function ExamRow({
             </span>
             <span>
               {fmt(t.workspace.addedBy, {
-                name: ownerName(exam.authorId, lang, t),
+                name: ownerName(exam.authorId, lang, t, api.currentUserId),
               })}
             </span>
           </p>
@@ -915,13 +935,13 @@ function ExamRow({
               year: exam.year ?? "",
               semester: exam.semester ?? "",
               fileName: exam.fileName,
-              fileData: exam.fileData,
               fileType: exam.fileType,
               fileSize: exam.fileSize,
             }}
             submitLabel={t.actions.save}
             onSubmit={(values) => api.onSaveExam(subjectId, exam.id, values)}
             onCancel={api.onCancelEdit}
+            busy={api.busy}
           />
         </div>
       )}

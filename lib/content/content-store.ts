@@ -4,7 +4,7 @@
 
    Prototype architecture: an in-memory singleton (seeded from the mock data
    module) that is persisted to localStorage on every mutation, so a subject
-   created in /contribute shows up in /resources and opens correctly. No
+   created in /contribute shows up in /summaries and opens correctly. No
    database, backend, or API. On hard reloads the server renders the seed and
    the client hydrates from localStorage right after mount (the same
    hydration-safe pattern the dashboard uses for relative times).

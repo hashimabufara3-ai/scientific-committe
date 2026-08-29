@@ -90,7 +90,7 @@ export default function ResourceStage({
         {items.map((item) => (
           <li key={item.id} className="h-full">
             <Link
-              href={`/${lang}/resources/${item.id}`}
+              href={`/${lang}/summaries/${item.id}`}
               aria-label={item.title}
               className="group flex h-full flex-col rounded-2xl border border-white/10 bg-gradient-to-b from-white/[0.07] to-white/[0.02] p-5 outline-none transition-[border-color,box-shadow,background] duration-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent hover:border-accent/50 hover:bg-white/[0.04] hover:shadow-[0_0_50px_rgba(45,212,191,0.18),0_24px_60px_rgba(0,0,0,0.55)]"
             >

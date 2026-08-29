@@ -8,7 +8,13 @@ import type {
   MockExam,
   MockSubject,
 } from "@/lib/content/mock-contributor-data";
-import { fileKind, fileSizeLabel, openFileInTab } from "./file-utils";
+import {
+  downloadResource,
+  fileKind,
+  fileSizeLabel,
+  openFileInTab,
+  openResource,
+} from "./file-utils";
 import {
   CalendarIcon,
   DownloadIcon,
@@ -60,8 +66,19 @@ function ExamCard({
   const href = exam.fileData || exam.fileUrl;
 
   const open = () => {
-    if (exam.fileData) openFileInTab(exam.fileData);
-    else if (exam.fileUrl) window.open(exam.fileUrl, "_blank", "noopener");
+    if (exam.access) {
+      void openResource(exam.access.kind, exam.access.id);
+    } else if (exam.fileData) {
+      openFileInTab(exam.fileData);
+    } else if (exam.fileUrl) {
+      window.open(exam.fileUrl, "_blank", "noopener");
+    }
+  };
+
+  const handleDownload = () => {
+    if (exam.access) {
+      void downloadResource(exam.access.kind, exam.access.id, exam.fileName);
+    }
   };
 
   return (
@@ -101,17 +118,28 @@ function ExamCard({
         </div>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4">
-        {href && (
-          <a
-            href={href}
-            download={exam.fileName}
+        {exam.access ? (
+          <button
+            type="button"
+            onClick={handleDownload}
             className="btn-primary !px-4 !py-2 !text-xs motion-safe:active:scale-[0.97]"
           >
             <DownloadIcon className="h-4 w-4" />
             {strings.download}
-          </a>
+          </button>
+        ) : (
+          href && (
+            <a
+              href={href}
+              download={exam.fileName}
+              className="btn-primary !px-4 !py-2 !text-xs motion-safe:active:scale-[0.97]"
+            >
+              <DownloadIcon className="h-4 w-4" />
+              {strings.download}
+            </a>
+          )
         )}
-        {canView && (
+        {canView && (href || exam.access) && (
           <button
             type="button"
             onClick={open}

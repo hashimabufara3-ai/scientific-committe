@@ -10,7 +10,13 @@ import {
   visibleSummaries,
 } from "@/lib/content/mock-contributor-data";
 import { fmt } from "./contribute/primitives";
-import { fileKind, fileSizeLabel, openFileInTab } from "./file-utils";
+import {
+  downloadResource,
+  fileKind,
+  fileSizeLabel,
+  openFileInTab,
+  openResource,
+} from "./file-utils";
 import {
   DownloadIcon,
   ExternalLinkIcon,
@@ -124,10 +130,15 @@ export type ContributorFile = {
   /* The contribution/summary title — the file card's primary title. */
   title: string;
   fileName: string;
-  fileData: string;
+  /* Legacy prototype bytes. In production this is absent and `access` is set
+     instead — the card fetches the file on demand via a signed URL. */
+  fileData?: string;
   fileType?: string;
   fileSize?: number;
   owner: string;
+  /* Production access descriptor: fetch a short-lived signed URL for this
+     stored object when the user chooses View or Download. */
+  access?: { kind: "summary" | "exam"; id: string };
 };
 
 export function FileCard({
@@ -143,6 +154,20 @@ export function FileCard({
   const size = fileSizeLabel(file.fileSize);
   const canView =
     kind === "pdf" || kind === "image" || file.fileType === "text/plain";
+  const usingAccess = Boolean(file.access);
+  const hasFile = Boolean(file.fileData || file.access);
+
+  const handleDownload = () => {
+    if (!file.access) return;
+    void downloadResource(file.access.kind, file.access.id, file.fileName);
+  };
+  const handleView = () => {
+    if (file.access) {
+      void openResource(file.access.kind, file.access.id);
+    } else if (file.fileData) {
+      openFileInTab(file.fileData);
+    }
+  };
 
   return (
     <div className="flex h-full flex-col rounded-xl border border-white/10 bg-white/[0.03] p-5 transition-colors hover:border-accent/40">
@@ -174,18 +199,31 @@ export function FileCard({
         </div>
       </div>
       <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-white/10 pt-4">
-        <a
-          href={file.fileData}
-          download={file.fileName}
-          className="btn-primary !px-4 !py-2 !text-xs motion-safe:active:scale-[0.97]"
-        >
-          <DownloadIcon className="h-4 w-4" />
-          {strings.download}
-        </a>
-        {canView && (
+        {usingAccess ? (
           <button
             type="button"
-            onClick={() => openFileInTab(file.fileData)}
+            onClick={handleDownload}
+            className="btn-primary !px-4 !py-2 !text-xs motion-safe:active:scale-[0.97]"
+          >
+            <DownloadIcon className="h-4 w-4" />
+            {strings.download}
+          </button>
+        ) : (
+          hasFile && (
+            <a
+              href={file.fileData}
+              download={file.fileName}
+              className="btn-primary !px-4 !py-2 !text-xs motion-safe:active:scale-[0.97]"
+            >
+              <DownloadIcon className="h-4 w-4" />
+              {strings.download}
+            </a>
+          )
+        )}
+        {canView && hasFile && (
+          <button
+            type="button"
+            onClick={handleView}
             className="btn-ghost !px-4 !py-2 !text-xs motion-safe:active:scale-[0.97]"
           >
             <EyeIcon className="h-4 w-4" />

@@ -83,6 +83,8 @@ export type MockSummary = {
     url: string;
     type: string;
   }>;
+  /* Production access descriptor for an uploaded file (no base64 bytes). */
+  access?: ResourceAccess;
   authorId: string;
   createdAt: number;
   updatedAt?: number;
@@ -110,6 +112,8 @@ export type MockExam = {
   fileType?: string;
   fileSize?: number;
   fileUrl?: string;
+  /* Production access descriptor for an uploaded file (no base64 bytes). */
+  access?: ResourceAccess;
   authorId: string;
   createdAt: number;
   updatedAt?: number;
@@ -150,6 +154,12 @@ export type ActivityEvent = {
 };
 
 /* ---- Pure helpers --------------------------------------------------------- */
+
+/* Production (Postgres + Supabase Storage) access descriptor. Present only for
+   resources backed by a real stored object: the client fetches a short-lived
+   signed URL for `kind`+`id` on demand (View/Download) rather than carrying
+   bytes. Absent for prototype rows that use `fileData`. */
+export type ResourceAccess = { kind: "summary" | "exam"; id: string };
 
 export const isOwnedByMe = (authorId: string) => authorId === CURRENT_USER_ID;
 
@@ -298,7 +308,7 @@ export function stripDemoRecords(subjects: MockSubject[]): MockSubject[] {
 }
 
 /* ---- Seed data --------------------------------------------------------------
-   Exposed only so server-side metadata lookups (resources/* pages) keep a
+   Exposed only so server-side metadata lookups (summaries/* pages) keep a
    stable function signature. The catalog itself now starts EMPTY — the
    content store no longer seeds demo content, and any demo records already
    saved to localStorage are filtered out on load via stripDemoRecords(). */

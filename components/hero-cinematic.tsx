@@ -245,7 +245,7 @@ export default function HeroCinematic({ hero, stats, lang }: Props) {
           className="mt-6 flex flex-wrap items-center justify-center gap-3"
           style={{ x: enabled ? ctlX : undefined, y: enabled ? ctlY : undefined }}
         >
-          <Link href={`/${lang}/resources`} className="btn-primary">
+          <Link href={`/${lang}/summaries`} className="btn-primary">
             {hero.ctaPrimary}
             <ArrowRightIcon className="h-4 w-4 rtl-flip" />
           </Link>

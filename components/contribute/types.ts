@@ -55,10 +55,14 @@ export type SubjectRef = {
 export type SummaryFormValues = {
   title: string;
   source: "upload" | "content";
+  /* The raw browser File chosen for a NEW upload. Absent when editing an
+     existing upload without replacing its file (metadata-only update). The
+     bytes are never read as a data URL — they go to Storage via the
+     /api/resources/upload route handler. */
+  file?: File;
+  /* Display name — either the newly chosen file's name or the existing
+     stored file's name when editing (no replacement). */
   fileName: string;
-  /* Persisted file bytes as a data URL (prototype stand-in for a real upload
-     URL) — without it an uploaded file has no openable/downloadable content. */
-  fileData?: string;
   fileType?: string;
   fileSize?: number;
   content: string;
@@ -77,8 +81,9 @@ export type ExamFormValues = {
   year: string;
   /* Empty string means unknown semester. */
   semester: Semester | "";
+  /* Newly chosen raw File, or absent when editing without replacement. */
+  file?: File;
   fileName: string;
-  fileData?: string;
   fileType?: string;
   fileSize?: number;
 };

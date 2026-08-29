@@ -134,6 +134,162 @@ export type Database = {
         };
         Relationships: [];
       };
+      subjects: {
+        Row: {
+          id: string;
+          title: string;
+          title_ar: string | null;
+          category: string | null;
+          author_id: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          title: string;
+          title_ar?: string | null;
+          category?: string | null;
+          author_id: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          title?: string;
+          title_ar?: string | null;
+          category?: string | null;
+          author_id?: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      summaries: {
+        Row: {
+          id: string;
+          subject_id: string;
+          title: string;
+          title_ar: string | null;
+          description: string | null;
+          description_ar: string | null;
+          source: "upload" | "content";
+          content: string | null;
+          videos: string[];
+          storage_path: string | null;
+          file_name: string | null;
+          mime_type: string | null;
+          file_size: number | null;
+          file_url: string | null;
+          file_size_label: string | null;
+          pages: number | null;
+          external_resources: Record<string, unknown>[];
+          author_id: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          subject_id: string;
+          title: string;
+          title_ar?: string | null;
+          description?: string | null;
+          description_ar?: string | null;
+          source?: "upload" | "content";
+          content?: string | null;
+          videos?: string[];
+          storage_path?: string | null;
+          file_name?: string | null;
+          mime_type?: string | null;
+          file_size?: number | null;
+          file_url?: string | null;
+          file_size_label?: string | null;
+          pages?: number | null;
+          external_resources?: Record<string, unknown>[];
+          author_id: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          subject_id?: string;
+          title?: string;
+          title_ar?: string | null;
+          description?: string | null;
+          description_ar?: string | null;
+          source?: "upload" | "content";
+          content?: string | null;
+          videos?: string[];
+          storage_path?: string | null;
+          file_name?: string | null;
+          mime_type?: string | null;
+          file_size?: number | null;
+          file_url?: string | null;
+          file_size_label?: string | null;
+          pages?: number | null;
+          external_resources?: Record<string, unknown>[];
+          author_id?: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
+      exam_files: {
+        Row: {
+          id: string;
+          subject_id: string;
+          type: "midterm" | "final";
+          year: string | null;
+          semester: "first" | "second" | "summer" | null;
+          storage_path: string;
+          file_name: string;
+          mime_type: string | null;
+          file_size: number | null;
+          file_url: string | null;
+          author_id: string;
+          is_active: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          subject_id: string;
+          type: "midterm" | "final";
+          year?: string | null;
+          semester?: "first" | "second" | "summer" | null;
+          storage_path: string;
+          file_name: string;
+          mime_type?: string | null;
+          file_size?: number | null;
+          file_url?: string | null;
+          author_id: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          subject_id?: string;
+          type?: "midterm" | "final";
+          year?: string | null;
+          semester?: "first" | "second" | "summer" | null;
+          storage_path?: string;
+          file_name?: string;
+          mime_type?: string | null;
+          file_size?: number | null;
+          file_url?: string | null;
+          author_id?: string;
+          is_active?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -289,6 +445,105 @@ export type Database = {
       };
       clear_must_change_password: {
         Args: Record<PropertyKey, never>;
+        Returns: undefined;
+      };
+      create_subject: {
+        Args: {
+          p_title: string;
+          p_title_ar?: string | null;
+          p_category?: string | null;
+        };
+        Returns: string;
+      };
+      update_subject: {
+        Args: {
+          p_id: string;
+          p_title: string;
+          p_title_ar?: string | null;
+          p_category?: string | null;
+        };
+        Returns: undefined;
+      };
+      delete_subject: {
+        Args: { p_id: string };
+        Returns: undefined;
+      };
+      create_summary: {
+        Args: {
+          p_subject_id: string;
+          p_title: string;
+          p_title_ar?: string | null;
+          p_description?: string | null;
+          p_description_ar?: string | null;
+          p_source?: string;
+          p_content?: string | null;
+          p_videos?: string[];
+          p_storage_path?: string | null;
+          p_file_name?: string | null;
+          p_mime_type?: string | null;
+          p_file_size?: number | null;
+          p_file_url?: string | null;
+          p_file_size_label?: string | null;
+          p_pages?: number | null;
+          p_external_resources?: Record<string, unknown>[];
+        };
+        Returns: string;
+      };
+      update_summary: {
+        Args: {
+          p_id: string;
+          p_title: string;
+          p_title_ar?: string | null;
+          p_description?: string | null;
+          p_description_ar?: string | null;
+          p_source?: string;
+          p_content?: string | null;
+          p_videos?: string[];
+          p_storage_path?: string | null;
+          p_file_name?: string | null;
+          p_mime_type?: string | null;
+          p_file_size?: number | null;
+          p_file_url?: string | null;
+          p_file_size_label?: string | null;
+          p_pages?: number | null;
+          p_external_resources?: Record<string, unknown>[];
+        };
+        Returns: undefined;
+      };
+      delete_summary: {
+        Args: { p_id: string };
+        Returns: undefined;
+      };
+      create_exam: {
+        Args: {
+          p_subject_id: string;
+          p_type: "midterm" | "final";
+          p_year?: string | null;
+          p_semester?: string | null;
+          p_storage_path: string;
+          p_file_name: string;
+          p_mime_type?: string | null;
+          p_file_size?: number | null;
+          p_file_url?: string | null;
+        };
+        Returns: string;
+      };
+      update_exam: {
+        Args: {
+          p_id: string;
+          p_type: "midterm" | "final";
+          p_year?: string | null;
+          p_semester?: string | null;
+          p_storage_path?: string | null;
+          p_file_name?: string | null;
+          p_mime_type?: string | null;
+          p_file_size?: number | null;
+          p_file_url?: string | null;
+        };
+        Returns: undefined;
+      };
+      delete_exam: {
+        Args: { p_id: string };
         Returns: undefined;
       };
     };
