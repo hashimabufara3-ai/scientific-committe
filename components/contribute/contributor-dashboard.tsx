@@ -507,6 +507,10 @@ export default function ContributorDashboard({
     setView(next);
     setOpenForm(null);
     setEditing(null);
+    /* The contribute dashboard and subject workspace swap entirely via state
+       (no URL change), so Next's built-in scroll-to-top on navigation never
+       fires. Start each destination at the top. */
+    window.scrollTo(0, 0);
   }, []);
 
   const onToggleForm = useCallback((form: OpenForm) => {
