@@ -536,11 +536,6 @@ export default function ContributorDashboard({
     editing,
     deleteTarget,
     onOpenSubject: (id) => go({ name: "subject", subjectId: id }),
-    onEditSubject: (id) => {
-      setView({ name: "subject", subjectId: id });
-      setOpenForm(null);
-      setEditing({ kind: "subject", id });
-    },
     onBackToDashboard: () => go({ name: "dashboard" }),
     onToggleForm,
     onStartEdit,

@@ -71,7 +71,6 @@ export type Api = {
   editing: EditingState;
   deleteTarget: DeleteTarget | null;
   onOpenSubject: (id: string) => void;
-  onEditSubject: (id: string) => void;
   onBackToDashboard: () => void;
   onToggleForm: (form: OpenForm) => void;
   onStartEdit: (edit: EditingState) => void;
@@ -349,7 +348,6 @@ function SubjectCard({ subject, api }: { subject: MockSubject; api: Api }) {
   const owned = isOwned(subject.authorId, api.currentUserId);
   const counts = subjectChildCounts(subject);
   const open = () => api.onOpenSubject(subject.id);
-  const edit = () => api.onEditSubject(subject.id);
   const del = () =>
     api.onRequestDelete({
       kind: "subject",
@@ -373,7 +371,7 @@ function SubjectCard({ subject, api }: { subject: MockSubject; api: Api }) {
           <h3 className="text-lg font-semibold leading-snug tracking-tight text-foreground">
             {displayName(subject.title, subject.titleAr, lang)}
           </h3>
-          <RowActions owned={owned} onEdit={edit} onDelete={del} t={t} />
+          <RowActions owned={owned} onDelete={del} t={t} />
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <span className="text-xs text-muted">
