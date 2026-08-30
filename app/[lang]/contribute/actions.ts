@@ -1,11 +1,12 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionRole } from "../../../lib/auth/authorize";
 import { createAdminClient, createClient } from "../../../lib/auth/supabase-server";
 import { checkRateLimit, LIMITERS } from "../../../lib/security/rate-limit";
 import { removeResource } from "../../../lib/content/storage";
+import { RESOURCES_CATALOG_TAG } from "../../../lib/content/data-access";
 import type { ExamType, Semester } from "../../../lib/content/mock-contributor-data";
 
 /* Server actions for the Resources/Summaries contributor workflow.
@@ -81,7 +82,15 @@ async function authorizeContributor(lang: string) {
 }
 
 function revalidateResources(lang: string) {
-  revalidatePath(`/${lang}/summaries`);
+  /* Invalidate the public catalog via its cache TAG, not revalidatePath() on
+     the /[lang]/summaries route. The summaries page is a build-time ISR page
+     under dynamicParams=false; in Next 16 an on-demand revalidatePath() on it
+     can throw NoFallbackError and cache a 404 for the route. Tagging the data
+     (see getCachedSubjects) and revalidating the tag avoids that path entirely
+     and still makes the page regenerate on its next request. */
+  revalidateTag(RESOURCES_CATALOG_TAG, "max");
+  /* The contributor workspace is force-dynamic, so a path revalidate here is
+     harmless (no build-time page to poison). */
   revalidatePath(`/${lang}/contribute`);
 }
 

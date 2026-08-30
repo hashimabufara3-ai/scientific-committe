@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDictionary, hasLocale } from "../dictionaries";
-import { getSubjects } from "../../../lib/content/data-access";
+import { getCachedSubjects } from "../../../lib/content/data-access";
 import SectionHeading from "../../../components/section-heading";
 import Reveal from "../../../components/reveal";
 import UnifiedLibrary from "../../../components/unified-library";
@@ -24,11 +24,16 @@ export async function generateMetadata({
 
    Freshness: this route is statically generated at build time (the [lang]
    layout uses generateStaticParams + dynamicParams=false), and in Next 16
-   on-demand revalidatePath() does not reliably regenerate build-time pages
-   (it can throw NoFallbackError and 404 instead of re-rendering). We therefore
-   use time-based ISR (revalidate below) so a contributor-created subject
-   appears shortly after creation without a rebuild. The server actions still
-   call revalidatePath() as an extra best-effort invalidation.
+   on-demand revalidatePath() does NOT regenerate build-time pages reliably —
+   it can throw NoFallbackError and 404 the route instead of re-rendering it.
+   We therefore NEVER call revalidatePath() on this route. Instead:
+
+     - the catalog data is read through the tagged, cached getCachedSubjects()
+       (cache tag RESOURCES_CATALOG_TAG), and
+     - contributor server actions call revalidateTag(RESOURCES_CATALOG_TAG)
+       after a mutation, which invalidates just the data and lets this ISR page
+       regenerate normally on its next request — no NoFallbackError, no 404.
+     - time-based ISR (revalidate below) remains as a safety net.
 
    File bytes are never rendered here — cards carry metadata and fetch signed
    URLs on demand. */
@@ -38,7 +43,7 @@ export default async function ResourcesPage({
   const { lang } = await params;
   if (!hasLocale(lang)) notFound();
   const dict = await getDictionary(lang);
-  const subjects = await getSubjects();
+  const subjects = await getCachedSubjects();
 
   return (
     <main id="main-content" className="relative overflow-hidden pb-24">
