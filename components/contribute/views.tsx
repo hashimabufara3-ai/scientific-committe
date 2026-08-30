@@ -71,6 +71,7 @@ export type Api = {
   editing: EditingState;
   deleteTarget: DeleteTarget | null;
   onOpenSubject: (id: string) => void;
+  onEditSubject: (id: string) => void;
   onBackToDashboard: () => void;
   onToggleForm: (form: OpenForm) => void;
   onStartEdit: (edit: EditingState) => void;
@@ -348,6 +349,7 @@ function SubjectCard({ subject, api }: { subject: MockSubject; api: Api }) {
   const owned = isOwned(subject.authorId, api.currentUserId);
   const counts = subjectChildCounts(subject);
   const open = () => api.onOpenSubject(subject.id);
+  const edit = () => api.onEditSubject(subject.id);
   const del = () =>
     api.onRequestDelete({
       kind: "subject",
@@ -371,7 +373,7 @@ function SubjectCard({ subject, api }: { subject: MockSubject; api: Api }) {
           <h3 className="text-lg font-semibold leading-snug tracking-tight text-foreground">
             {displayName(subject.title, subject.titleAr, lang)}
           </h3>
-          <RowActions owned={owned} onDelete={del} t={t} />
+          <RowActions owned={owned} onEdit={edit} onDelete={del} t={t} />
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <span className="text-xs text-muted">
@@ -629,7 +631,6 @@ function SummaryEditInline({
 
 function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) {
   const { t, lang } = api;
-  const owned = isOwned(subject.authorId, api.currentUserId);
   const counts = subjectChildCounts(subject);
   const summaries = visibleSummaries(subject);
   const exams = visibleExams(subject);
@@ -645,7 +646,7 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
           },
         ]}
       />
-      <div className="mt-8 flex flex-wrap items-start justify-between gap-4">
+      <div className="mt-8">
         <div className="max-w-2xl">
           <Kicker>{t.workspace.subjectTag}</Kicker>
           <h1 className="mt-3 text-2xl font-semibold tracking-tight text-foreground sm:text-3xl">
@@ -655,28 +656,6 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
             {fmt(t.workspace.addedBy, { name: ownerName(subject.authorId, lang, t, api.currentUserId) })}
           </p>
         </div>
-        {owned && (
-          <div className="flex items-center gap-2">
-            <GhostButton onClick={() => api.onStartEdit({ kind: "subject", id: subject.id })}>
-              <PencilIcon className="h-4 w-4" />
-              {t.actions.edit}
-            </GhostButton>
-            <GhostButton
-              className="!border-red-400/40 !bg-red-500/10 !text-red-300 hover:!bg-red-500/20"
-              onClick={() =>
-                api.onRequestDelete({
-                  kind: "subject",
-                  id: subject.id,
-                  name: displayName(subject.title, subject.titleAr, lang),
-                  counts,
-                })
-              }
-            >
-              <TrashIcon className="h-4 w-4" />
-              {t.actions.delete}
-            </GhostButton>
-          </div>
-        )}
       </div>
 
       {api.editing?.kind === "subject" && api.editing.id === subject.id && (
