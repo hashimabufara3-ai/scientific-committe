@@ -20,6 +20,19 @@ export async function proxy(request: NextRequest) {
     });
   }
 
+  /* Server Action POSTs re-authenticate server-side inside their own handler
+     (getSessionRole(): getUser + role, plus the must_change_password
+     enforcement added to authorizeContributor). Running the proxy's duplicate
+     session refresh + profiles lookup again on those requests only adds two
+     Supabase round trips for the same user. Skip only the Supabase layers for
+     Server Actions; the global IP flood limit above still applies, and cookie
+     refresh + must_change_password enforcement are unchanged for all normal
+     page/navigation and Route Handler requests (which carry no Next-Action
+     header). */
+  if (request.headers.has("Next-Action")) {
+    return NextResponse.next({ request });
+  }
+
   /* --- Layer 2: Supabase session refresh --- */
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

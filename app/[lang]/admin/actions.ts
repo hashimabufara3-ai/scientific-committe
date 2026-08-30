@@ -63,6 +63,20 @@ function mapRpcError(message: string): AdminErrorKey {
   return "generic";
 }
 
+/* Shared admin actor gate. Re-reads the authoritative session from the
+   database (getSessionRole: getUser + role + must_change_password in one
+   round trip), redirects unauthenticated users to sign-in, and — because
+   Server Actions now skip the proxy's Supabase layers — redirects any profile
+   flagged for a forced password change to the change-password page, mirroring
+   the proxy's navigation rule. Role is still never trusted from the client and
+   the SECURITY DEFINER RPCs remain the authoritative second layer. */
+async function requireAdminActor(lang: string) {
+  const session = await getSessionRole();
+  if (!session) redirect(`/${lang}/auth/sign-in`);
+  if (session.mustChangePassword) redirect(`/${lang}/auth/change-password`);
+  return session;
+}
+
 /* Change a member's role through assign_role(). */
 export async function setRoleAction(
   _prev: AdminActionResult,
@@ -72,8 +86,7 @@ export async function setRoleAction(
   const targetId = String(formData.get("targetId") ?? "");
   const newRoleRaw = String(formData.get("newRole") ?? "");
 
-  const session = await getSessionRole();
-  if (!session) redirect(`/${lang}/auth/sign-in`);
+  const session = await requireAdminActor(lang);
   if (!isRole(newRoleRaw)) return { ok: false, errorKey: "notAllowed" };
   const newRole = newRoleRaw as Role;
 
@@ -140,8 +153,7 @@ export async function transferOwnershipAction(
   const targetId = String(formData.get("targetId") ?? "");
   const confirmName = String(formData.get("confirmName") ?? "").trim();
 
-  const session = await getSessionRole();
-  if (!session) redirect(`/${lang}/auth/sign-in`);
+  const session = await requireAdminActor(lang);
   if (session.role !== "owner") {
     return { ok: false, errorKey: "transferOnlyOwner" };
   }
@@ -220,8 +232,7 @@ export async function deleteAccountAction(
   const lang = readLang(formData);
   const targetId = String(formData.get("targetId") ?? "");
 
-  const session = await getSessionRole();
-  if (!session) redirect(`/${lang}/auth/sign-in`);
+  const session = await requireAdminActor(lang);
   if (session.role !== "admin" && session.role !== "owner") {
     return { ok: false, errorKey: "notAllowed" };
   }
@@ -381,8 +392,7 @@ export async function createCommitteeMemberAction(
 ): Promise<CommitteeMemberActionResult> {
   const lang = readLang(formData);
 
-  const session = await getSessionRole();
-  if (!session) redirect(`/${lang}/auth/sign-in`);
+  const session = await requireAdminActor(lang);
   if (session.role !== "admin" && session.role !== "owner") {
     return { ok: false, errorKey: "notAllowed" };
   }
@@ -496,8 +506,7 @@ export async function createCommitteeMemberWithAccountAction(
 ): Promise<CommitteeMemberWithAccountActionResult> {
   const lang = readLang(formData);
 
-  const session = await getSessionRole();
-  if (!session) redirect(`/${lang}/auth/sign-in`);
+  const session = await requireAdminActor(lang);
   if (session.role !== "admin" && session.role !== "owner") {
     return { ok: false, errorKey: "notAllowed" };
   }
@@ -756,8 +765,7 @@ export async function updateCommitteeMemberAction(
   const lang = readLang(formData);
   const targetId = String(formData.get("targetId") ?? "");
 
-  const session = await getSessionRole();
-  if (!session) redirect(`/${lang}/auth/sign-in`);
+  const session = await requireAdminActor(lang);
   if (session.role !== "admin" && session.role !== "owner") {
     return { ok: false, errorKey: "notAllowed" };
   }
@@ -801,8 +809,7 @@ export async function deleteCommitteeMemberAction(
   const lang = readLang(formData);
   const targetId = String(formData.get("targetId") ?? "");
 
-  const session = await getSessionRole();
-  if (!session) redirect(`/${lang}/auth/sign-in`);
+  const session = await requireAdminActor(lang);
   if (session.role !== "admin" && session.role !== "owner") {
     return { ok: false, errorKey: "notAllowed" };
   }

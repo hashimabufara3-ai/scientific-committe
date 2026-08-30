@@ -18,9 +18,16 @@ export type SessionRole = {
 export type SessionWithOptionalRole = {
   user: User;
   role: Role | null;
+  /* True when this profile is flagged for a forced password change. The proxy
+     enforces this on navigation; Server Actions (which skip the proxy Supabase
+     layers) enforce it themselves via authorizeContributor(). Always read from
+     the database — never trusted from the client. */
+  mustChangePassword: boolean;
 };
 
-/* Current session + role, or null when not authenticated. */
+/* Current session + role, or null when not authenticated. The role and the
+   must_change_password flag are fetched from the profile in ONE database
+   round trip. */
 export async function getSessionRole(): Promise<SessionWithOptionalRole | null> {
   const supabase = await createClient();
   const {
@@ -30,13 +37,14 @@ export async function getSessionRole(): Promise<SessionWithOptionalRole | null> 
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role")
+    .select("role, must_change_password")
     .eq("id", user.id)
     .maybeSingle();
 
   return {
     user,
     role: isRole(profile?.role) ? profile.role : null,
+    mustChangePassword: Boolean(profile?.must_change_password),
   };
 }
 

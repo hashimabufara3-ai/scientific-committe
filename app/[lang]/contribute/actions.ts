@@ -68,6 +68,14 @@ function mapRpcError(message: string): ResourceErrorKey {
 async function authorizeContributor(lang: string) {
   const session = await getSessionRole();
   if (!session) redirect(`/${lang}/auth/sign-in`);
+  /* The proxy no longer runs the must_change_password check on Server Action
+     POSTs (it skips its Supabase layers for requests carrying Next-Action), so
+     the action enforces it itself — identical to the proxy's navigation rule:
+     a profile flagged for a forced password change cannot run any contributor
+     mutation. */
+  if (session.mustChangePassword) {
+    redirect(`/${lang}/auth/change-password`);
+  }
   if (
     session.role !== "contributor" &&
     session.role !== "admin" &&
