@@ -76,6 +76,9 @@ export async function getSessionRole(): Promise<SessionWithOptionalRole | null> 
 /* Require an authenticated session with at least the given role.
 
    - Not authenticated  -> redirect to sign-in.
+   - Forced password change -> redirect to the change-password page (Server
+     Actions and protected-page Server Components skip the proxy's Supabase
+     layers, so this boundary is the authoritative enforcement point).
    - Role missing/too low -> redirect to the localized home page.
 
    Returns the narrowed session (role is guaranteed to be present and
@@ -87,6 +90,12 @@ export async function requireRole(
   const session = await getSessionRole();
   if (!session) {
     redirect(`/${lang}/auth/sign-in?next=/${lang}`);
+  }
+  /* Same rule as the proxy's navigation enforcement: a profile flagged for a
+     forced password change must not reach protected pages. Must be checked
+     here because eligible RSC/Server Component requests skip the proxy layers. */
+  if (session.mustChangePassword) {
+    redirect(`/${lang}/auth/change-password`);
   }
   if (session.role === null || !isAtLeast(session.role, min)) {
     redirect(`/${lang}`);

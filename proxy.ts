@@ -20,16 +20,29 @@ export async function proxy(request: NextRequest) {
     });
   }
 
-  /* Server Action POSTs re-authenticate server-side inside their own handler
-     (getSessionRole(): getUser + role, plus the must_change_password
-     enforcement added to authorizeContributor). Running the proxy's duplicate
-     session refresh + profiles lookup again on those requests only adds two
-     Supabase round trips for the same user. Skip only the Supabase layers for
-     Server Actions; the global IP flood limit above still applies, and cookie
-     refresh + must_change_password enforcement are unchanged for all normal
-     page/navigation and Route Handler requests (which carry no Next-Action
-     header). */
-  if (request.headers.has("Next-Action")) {
+  /* Server Action POSTs and authenticated RSC sub-requests for PROTECTED
+     routes (contribute/admin) re-authenticate server-side inside the request:
+     Server Actions via authorizeContributor(), protected Server Components via
+     requireRole() — both run authoritative getUser() plus the database profile
+     read (role + must_change_password) and enforce the forced-password
+     redirect. Running the proxy's duplicate session refresh + profile lookup
+     again on those requests only adds repeated Supabase round trips for the
+     same user. Skip only the Supabase layers when:
+       - the request is a Server Action (Next-Action header), OR
+       - the request is a client RSC sub-request (the App Router emits the
+         `rsc` header / `?_rsc=` query) FOR a protected route.
+     The global IP flood limit above still applies to every request, and cookie
+     refresh + must_change_password enforcement stay in the proxy for all
+     normal (non-RSC) document requests, auth/change-password routes, Route
+     Handlers and all publicly-accessible pages. */
+  const isProtectedRoute =
+    /^\/(en|ar)\/(contribute|admin)(\/|$)/.test(request.nextUrl.pathname);
+  const isRscSubrequest =
+    request.headers.has("rsc") || request.nextUrl.searchParams.has("_rsc");
+  if (
+    request.headers.has("Next-Action") ||
+    (isProtectedRoute && isRscSubrequest)
+  ) {
     return NextResponse.next({ request });
   }
 

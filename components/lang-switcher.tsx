@@ -16,6 +16,7 @@ export function LangSwitcher({ lang }: { lang: string }) {
   return (
     <Link
       href={href}
+      prefetch={false}
       className="inline-flex h-10 items-center gap-1.5 rounded-full border border-white/10 px-3 text-sm text-muted transition hover:border-accent/40 hover:text-foreground"
       aria-label={label}
     >

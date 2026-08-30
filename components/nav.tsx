@@ -55,8 +55,10 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
     ...(isAdminOrOwner
       ? [{ href: `/${lang}/admin`, label: dict.admin }]
       : []),
-    { href: `/${lang}/about`, label: dict.about },
-    { href: `/${lang}/contact`, label: dict.contact },
+    /* Secondary destinations: no eager prefetch (reduces the per-page RSC
+       prefetch burst while primary navigation keeps eager prefetching). */
+    { href: `/${lang}/about`, label: dict.about, prefetch: false },
+    { href: `/${lang}/contact`, label: dict.contact, prefetch: false },
   ];
 
   const isActive = (href: string, exact?: boolean) =>
@@ -85,6 +87,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
             <Link
               key={link.href}
               href={link.href}
+              prefetch={link.prefetch ?? undefined}
               className={linkClass(link.href, link.exact)}
             >
               {link.label}
@@ -98,6 +101,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
             <>
               <Link
                 href={`/${lang}/account`}
+                prefetch={false}
                 className="btn-ghost hidden !px-4 !py-2 sm:inline-flex"
               >
                 {dict.account}
@@ -112,12 +116,14 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
             <>
               <Link
                 href={`/${lang}/auth/sign-in`}
+                prefetch={false}
                 className="btn-ghost hidden !px-4 !py-2 sm:inline-flex"
               >
                 {dict.signIn}
               </Link>
               <Link
                 href={`/${lang}/contact`}
+                prefetch={false}
                 className="btn-primary hidden !px-4 !py-2 sm:inline-flex"
               >
                 {dict.cta}
@@ -147,6 +153,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
               <Link
                 key={link.href}
                 href={link.href}
+                prefetch={link.prefetch ?? undefined}
                 onClick={() => setOpen(false)}
                 className={`rounded-xl px-4 py-3 text-sm transition-colors ${
                   isActive(link.href, link.exact)
@@ -161,6 +168,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
               <>
                 <Link
                   href={`/${lang}/account`}
+                  prefetch={false}
                   onClick={() => setOpen(false)}
                   className="rounded-xl px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-white/5"
                 >
@@ -176,6 +184,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
               <>
                 <Link
                   href={`/${lang}/auth/sign-in`}
+                  prefetch={false}
                   onClick={() => setOpen(false)}
                   className="rounded-xl px-4 py-3 text-sm font-medium text-foreground transition-colors hover:bg-white/5"
                 >
@@ -183,6 +192,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
                 </Link>
                 <Link
                   href={`/${lang}/contact`}
+                  prefetch={false}
                   onClick={() => setOpen(false)}
                   className="btn-primary mt-2"
                 >
