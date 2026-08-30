@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { getSessionRole } from "../../../lib/auth/authorize";
+import { buildSessionWithRole, getSessionUser } from "../../../lib/auth/authorize";
 import { createAdminClient, createClient } from "../../../lib/auth/supabase-server";
 import { checkRateLimit, LIMITERS } from "../../../lib/security/rate-limit";
 import { removeResource } from "../../../lib/content/storage";
@@ -66,8 +66,35 @@ function mapRpcError(message: string): ResourceErrorKey {
 }
 
 async function authorizeContributor(lang: string) {
-  const session = await getSessionRole();
-  if (!session) redirect(`/${lang}/auth/sign-in`);
+  const au = await getSessionUser();
+  if (!au) redirect(`/${lang}/auth/sign-in`);
+
+  const { user, supabase } = au;
+
+  /* The two authorization reads that depend only on the user id run in
+     PARALLEL:
+       - the database profile (role + must_change_password);
+       - the Upstash adminAction rate limit.
+     Both are awaited together BEFORE the caller may reach any mutation; a
+     failed/absent profile leaves role null (rejected below) and a rejected rate
+     limit returns null, so the delete RPC can never run early or unauthorized. */
+  const profilePromise = supabase
+    .from("profiles")
+    .select("role, must_change_password")
+    .eq("id", user.id)
+    .maybeSingle();
+  const ratePromise = checkRateLimit(
+    LIMITERS.adminAction,
+    `resources:action:${user.id}`
+  );
+
+  const [{ data: profile }, { success: allowed }] = await Promise.all([
+    profilePromise,
+    ratePromise,
+  ]);
+
+  const session = buildSessionWithRole(user, profile);
+
   /* The proxy no longer runs the must_change_password check on Server Action
      POSTs (it skips its Supabase layers for requests carrying Next-Action), so
      the action enforces it itself — identical to the proxy's navigation rule:
@@ -83,10 +110,6 @@ async function authorizeContributor(lang: string) {
   ) {
     return null;
   }
-  const { success: allowed } = await checkRateLimit(
-    LIMITERS.adminAction,
-    `resources:action:${session.user.id}`
-  );
   return allowed ? session : null;
 }
 
