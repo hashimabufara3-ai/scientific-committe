@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDictionary, hasLocale } from "../../../dictionaries";
-import { getSubject, getSummary } from "../../../../../lib/content/data-access";
+import { getSubject, getSummary, getSummaryState } from "../../../../../lib/content/data-access";
 import { displayName } from "../../../../../lib/content/mock-contributor-data";
 import SummaryDetail from "../../../../../components/summary-detail";
+import StatusFeedback from "../../../../../components/status-feedback";
 
 export async function generateMetadata({
   params,
@@ -28,6 +29,20 @@ export default async function SummaryDetailPage({
   const { lang, id, summaryId } = await params;
   if (!hasLocale(lang)) notFound();
   const dict = await getDictionary(lang);
+
+  const summaryState = await getSummaryState(id, summaryId);
+  if (summaryState === "deleted") {
+    const unavailable = dict.resourcesPage.detail.unavailable;
+    return (
+      <StatusFeedback
+        kicker={unavailable.kicker}
+        title={unavailable.title}
+        body={unavailable.message}
+        dir={lang === "ar" ? "rtl" : "ltr"}
+        actions={[{ label: unavailable.back, href: `/${lang}/summaries` }]}
+      />
+    );
+  }
 
   const subject = await getSubject(id);
   const summary = await getSummary(id, summaryId);

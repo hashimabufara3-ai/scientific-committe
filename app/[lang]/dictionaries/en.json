@@ -344,7 +344,13 @@
       "externalResourcesSubtitle": "Additional resources and videos.",
       "watch": "Watch",
       "download": "Download",
-      "youtubeFallback": "YouTube video"
+      "youtubeFallback": "YouTube video",
+      "unavailable": {
+        "kicker": "Removed",
+        "title": "Material Unavailable",
+        "message": "This material has been removed from the platform and is no longer available.",
+        "back": "Back to Summaries"
+      }
     }
   },
   "previousExams": {

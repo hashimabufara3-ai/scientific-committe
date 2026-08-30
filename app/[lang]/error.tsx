@@ -1,8 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { captureBoundaryError } from "../../lib/security/sentry";
+import StatusFeedback from "../../components/status-feedback";
 
 /* Localized error boundary for the [lang] route tree (Next.js App Router).
 
@@ -82,28 +82,15 @@ export default function Error({ error, reset }: ErrorPageProps) {
   }
 
   return (
-    <main
-      id="main-content"
+    <StatusFeedback
+      kicker={isAr ? "خطأ" : "Error"}
+      title={isAr ? c.titleAr : c.titleEn}
+      body={isAr ? c.bodyAr : c.bodyEn}
       dir={isAr ? "rtl" : "ltr"}
-      className="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center justify-center px-4 py-28 text-center sm:px-6"
-    >
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-accent">
-        {isAr ? "خطأ" : "Error"}
-      </p>
-      <h1 className="mt-4 text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
-        {isAr ? c.titleAr : c.titleEn}
-      </h1>
-      <p className="mt-6 max-w-md text-base leading-relaxed text-muted" role="status">
-        {isAr ? c.bodyAr : c.bodyEn}
-      </p>
-      <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
-        <button type="button" onClick={reset} className="btn-primary">
-          {isAr ? c.retryAr : c.retryEn}
-        </button>
-        <Link href={`/${lang}`} className="btn-ghost">
-          {isAr ? c.homeAr : c.homeEn}
-        </Link>
-      </div>
-    </main>
+      actions={[
+        { label: isAr ? c.retryAr : c.retryEn, onClick: reset, variant: "primary" },
+        { label: isAr ? c.homeAr : c.homeEn, href: `/${lang}`, variant: "ghost" },
+      ]}
+    />
   );
 }

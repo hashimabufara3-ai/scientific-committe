@@ -343,7 +343,13 @@
       "externalResourcesSubtitle": "موارد وفيديوهات إضافية.",
       "watch": "مشاهدة",
       "download": "تنزيل",
-      "youtubeFallback": "فيديو يوتيوب"
+      "youtubeFallback": "فيديو يوتيوب",
+      "unavailable": {
+        "kicker": "محذوفة",
+        "title": "المادة غير متاحة",
+        "message": "تمت إزالة هذه المادة من المنصة ولم تعد متاحة بعد الآن.",
+        "back": "العودة إلى الملخصات"
+      }
     }
   },
   "previousExams": {

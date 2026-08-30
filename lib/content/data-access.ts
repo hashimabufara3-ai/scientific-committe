@@ -16,6 +16,7 @@
 */
 
 import { createAnonClient } from "../auth/supabase-anon";
+import { createAdminClient } from "../auth/supabase-server";
 import { createSignedResourceUrl } from "./storage";
 import type { MockExam, MockSubject, MockSummary } from "./mock-contributor-data";
 
@@ -292,4 +293,70 @@ export async function getExamAccessUrl(
     .maybeSingle();
   if (!exam?.storage_path) return null;
   return createSignedResourceUrl(exam.storage_path);
+}
+
+/* ---------------------------------------------------------------------------
+   Deleted-material detection.
+
+   Deletion is a SOFT delete: the SECURITY DEFINER functions (delete_subject,
+   delete_summary, delete_exam) only set is_active = false, keeping the row so
+   the app can tell "existed but was removed" from "never existed".
+
+   The anonymous public client respects RLS (public can only SELECT active
+   rows), so it cannot observe an inactive row. To distinguish the two cases
+   for logged-OUT visitors we probe existence with the service-role (admin)
+   client — trusted, server-side only. We read ONLY the is_active flag and
+   return a status enum, NEVER row content, so nothing is leaked to the
+   caller/browser beyond "active | deleted | missing".
+
+   These helpers are the ONLY places the public detail pages use the admin
+   client; the actual content rendered still comes from the anon client via
+   getSubject()/getSummary(), so the RLS read path is unchanged.
+--------------------------------------------------------------------------- */
+
+export type ResourceState = "active" | "deleted" | "missing";
+
+/* State of a subject/material: active, soft-deleted (row exists, inactive),
+   or missing (row never existed). */
+export async function getSubjectState(id: string): Promise<ResourceState> {
+  const { data, error } = await createAdminClient()
+    .from("subjects")
+    .select("is_active")
+    .eq("id", id)
+    .maybeSingle();
+  if (error || !data) return "missing";
+  return data.is_active ? "active" : "deleted";
+}
+
+/* State of a summary/article within a subject, and whether its enclosing
+   subject is still available. Returns:
+     active  - the summary exists, is active, and its subject is active.
+     deleted - the summary was soft-deleted, OR its parent subject was removed.
+     missing - neither the summary nor its subject exists as a live material
+               (a genuine 404). */
+export async function getSummaryState(
+  subjectId: string,
+  summaryId: string
+): Promise<ResourceState> {
+  const admin = createAdminClient();
+
+  const [summaryRes, subjectRes] = await Promise.all([
+    admin.from("summaries").select("is_active").eq("id", summaryId).eq("subject_id", subjectId).maybeSingle(),
+    admin.from("subjects").select("is_active").eq("id", subjectId).maybeSingle(),
+  ]);
+
+  const summary = summaryRes.data;
+  const subject = subjectRes.data;
+
+  if (summary) {
+    /* The article exists; it renders only when it AND its parent are active.
+       Otherwise it was removed (or its material was) -> unavailable. */
+    if (summary.is_active && subject?.is_active) return "active";
+    return "deleted";
+  }
+
+  /* Article id is unknown. If the subject material itself exists it is a
+     never-existing article id -> 404; if the parent was removed -> deleted. */
+  if (subject) return subject.is_active ? "missing" : "deleted";
+  return "missing";
 }
