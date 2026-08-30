@@ -104,6 +104,13 @@ export default function ContributorDashboard({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /* IDs of subjects whose delete Server Action already succeeded, but whose
+     removal has not yet been confirmed by the router.refresh() RSC round trip.
+     Only subjects a contributor successfully deleted are added, and only after
+     the authoritative server result. The server assigns unique ids, so an id
+     kept here can never match a future subject - the overlay is therefore safe
+     to keep without an explicit clear and is a no-op once fresh props arrive. */
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set());
 
   /* Relative times render only after mount so the SSR HTML (no "now") can
      never disagree with the client's clock. The synchronous set on mount is
@@ -526,6 +533,14 @@ export default function ContributorDashboard({
           showToast(errorText(r.errorKey));
           return;
         }
+        /* Delete succeeded server-side: hide this subject immediately so the
+           UI does not wait out the router.refresh() RSC round trip. */
+        setRemovedIds((prev) => {
+          if (prev.has(target.id)) return prev;
+          const next = new Set(prev);
+          next.add(target.id);
+          return next;
+        });
         if (view.name === "subject" && view.subjectId === target.id) {
           setView({ name: "dashboard" });
         }
@@ -583,7 +598,12 @@ export default function ContributorDashboard({
     busy,
     now,
     view,
-    subjects,
+    /* Locally drop subjects whose delete already succeeded so the card
+       disappears immediately after the Server Action returns instead of
+       waiting out the router.refresh() RSC round trip. Fresh server props
+       remain the source of truth: the removed rows no longer exist server-side,
+       so the overlay is a no-op once the RSC payload arrives. */
+    subjects: subjects.filter((s) => !removedIds.has(s.id)),
     activities,
     openForm,
     editing,
