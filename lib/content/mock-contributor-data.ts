@@ -166,10 +166,6 @@ export function normalizeTitle(title: string): string {
   return title.trim().toLowerCase().replace(/\s+/g, " ");
 }
 
-export function visibleSubjects(subjects: MockSubject[]): MockSubject[] {
-  return subjects.filter((s) => !s.deleted);
-}
-
 export function visibleSummaries(subject: MockSubject): MockSummary[] {
   return subject.summaries.filter((s) => !s.deleted);
 }
@@ -191,10 +187,6 @@ export function subjectChildCounts(subject: MockSubject) {
   };
 }
 
-export function videoCount(subject: MockSubject): number {
-  return subjectChildCounts(subject).videos;
-}
-
 /* Localized display name for a material or summary title. */
 export function displayName(
   title: string,
@@ -211,23 +203,12 @@ export function subjectSearchText(subject: MockSubject): string {
   return `${subject.title} ${subject.titleAr ?? ""}`.trim().toLowerCase();
 }
 
-/* Whether a candidate material name (typed in either language) refers to an
-   existing catalog subject — duplicate-prevention across locales. */
-export function subjectMatches(subject: MockSubject, candidate: string): boolean {
-  const normalized = normalizeTitle(candidate);
-  if (normalizeTitle(subject.title) === normalized) return true;
-  return subject.titleAr
-    ? normalizeTitle(subject.titleAr) === normalized
-    : false;
-}
-
-/* The pure, ACTIVE-only duplicate predicate shared by the server's
-   authoritative duplicate check. Given the candidate name and the ACTIVE
-   subject rows (each with `title` and a nullable `title_ar`), returns true
-   when an active subject matches in either language. NULL/empty `title_ar`
-   never produces a false match. Kept pure so the exact enforcement logic can
-   be exercised deterministically in tests and stays identical between the
-   server and any informational client hint. */
+/* The pure, ACTIVE-only duplicate predicate used by the server's authoritative
+   duplicate check. Given the candidate name and the ACTIVE subject rows (each
+   with `title` and a nullable `title_ar`), returns true when an active subject
+   matches in either language. NULL/empty `title_ar` never produces a false
+   match. Kept pure so the exact enforcement logic can be exercised
+   deterministically in tests and is identical everywhere it is used. */
 export function subjectIsDuplicate(
   activeSubjects: Array<{ title: string; title_ar: string | null }>,
   candidate: string

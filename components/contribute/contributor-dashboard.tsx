@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
   ActivityEvent,
@@ -8,7 +8,7 @@ import type {
   MockSubject,
 } from "@/lib/content/mock-contributor-data";
 import {
-  createSubjectAction,
+  createNewMaterialAction,
   updateSubjectAction,
   deleteSubjectAction,
   createSummaryAction,
@@ -116,8 +116,6 @@ export default function ContributorDashboard({
     return () => clearInterval(id);
   }, []);
 
-  const visible = useMemo(() => subjects, [subjects]);
-
   const showToast = useCallback((message: string) => {
     setToast(message);
     if (toastTimer.current) clearTimeout(toastTimer.current);
@@ -191,87 +189,138 @@ export default function ContributorDashboard({
     async (subjectRef: SubjectRef, values: SummaryFormValues) => {
       if (!begin()) return;
       try {
-        /* Resolve the subject this summary attaches to:
-           - a picked catalog subject id → that subject;
-           - a brand-new material name → created server-side, so the ACTIVE-only
-             duplicate check on the server is authoritative. We do NOT reuse a
-             match from the (possibly stale) `subjects` prop here: a soft-deleted
-             row could still be present in stale client state and reusing its id
-             would silently attach the summary to a deleted subject instead of
-             creating the new one. The server decides whether the name is a
-             genuine active duplicate. */
-        let subjectId = subjectRef.subjectId;
-        if (!subjectId && subjectRef.title) {
-          const created = await createSubjectAction(lang, subjectRef.title!);
-          if (!created.ok) {
-            showToast(errorText(created.errorKey));
-            return;
-          }
-          subjectId = created.id;
-        }
-        if (!subjectId) return;
-
-        let resultOk = false;
-        if (values.source === "upload") {
-          if (!values.file) {
-            showToast(t.errors.uploadMissing);
-            return;
-          }
-          const upload = await uploadFile(values.file, "summary");
-          if (!upload) {
-            showToast(t.errors.upload);
-            return;
-          }
-          const created = await createSummaryAction(lang, {
-            subjectId,
-            title: values.title,
-            source: "upload",
-            storagePath: upload.path,
-            fileName: upload.fileName,
-            mimeType: upload.mimeType,
-            fileSize: upload.fileSize,
-            videos: values.videos,
-          });
-          if (!created.ok) {
-            showToast(errorText(created.errorKey));
-            return;
-          }
-          resultOk = created.ok;
-        } else {
-          const created = await createSummaryAction(lang, {
-            subjectId,
-            title: values.title,
-            source: "content",
-            content: values.content,
-            videos: values.videos,
-          });
-          if (!created.ok) {
-            showToast(errorText(created.errorKey));
-            return;
-          }
-          resultOk = created.ok;
-        }
-        if (!resultOk) return;
-
-        /* Optional previous exam attached during subject creation — persisted
-           after the (possibly just-created) subject, best-effort. */
-        if (values.exam?.file) {
-          const examUpload = await uploadFile(values.exam.file, "exam");
-          if (examUpload) {
-            const created = await createExamAction(lang, {
-              subjectId,
-              type: values.exam.type,
-              year: values.exam.year,
-              semester: values.exam.semester,
-              storagePath: examUpload.path,
-              fileName: examUpload.fileName,
-              mimeType: examUpload.mimeType,
-              fileSize: examUpload.fileSize,
+        if (subjectRef.subjectId) {
+          /* Existing material: attach the summary (and any optional exam) to
+             an already-published subject. */
+          if (values.source === "upload") {
+            if (!values.file) {
+              showToast(t.errors.uploadMissing);
+              return;
+            }
+            const upload = await uploadFile(values.file, "summary");
+            if (!upload) {
+              showToast(t.errors.upload);
+              return;
+            }
+            const created = await createSummaryAction(lang, {
+              subjectId: subjectRef.subjectId,
+              title: values.title,
+              source: "upload",
+              storagePath: upload.path,
+              fileName: upload.fileName,
+              mimeType: upload.mimeType,
+              fileSize: upload.fileSize,
+              videos: values.videos,
             });
-            if (!created.ok) showToast(errorText(created.errorKey));
+            if (!created.ok) {
+              showToast(errorText(created.errorKey));
+              return;
+            }
           } else {
-            showToast(t.errors.upload);
+            const created = await createSummaryAction(lang, {
+              subjectId: subjectRef.subjectId,
+              title: values.title,
+              source: "content",
+              content: values.content,
+              videos: values.videos,
+            });
+            if (!created.ok) {
+              showToast(errorText(created.errorKey));
+              return;
+            }
           }
+
+          /* Optional previous exam attached to an existing subject —
+             best-effort, never gates the summary being published. */
+          if (values.exam?.file) {
+            const examUpload = await uploadFile(values.exam.file, "exam");
+            if (examUpload) {
+              const created = await createExamAction(lang, {
+                subjectId: subjectRef.subjectId,
+                type: values.exam.type,
+                year: values.exam.year,
+                semester: values.exam.semester,
+                storagePath: examUpload.path,
+                fileName: examUpload.fileName,
+                mimeType: examUpload.mimeType,
+                fileSize: examUpload.fileSize,
+              });
+              if (!created.ok) showToast(errorText(created.errorKey));
+            } else {
+              showToast(t.errors.upload);
+            }
+          }
+        } else if (subjectRef.title) {
+          /* BRAND-NEW material: uploads happen first (the atomic RPC needs the
+             object paths), then ONE server action creates the subject, its
+             first summary and the optional exam inside a single database
+             transaction. The subject is never publicly visible before the
+             creation commits; on any rejection the action compensates by
+             removing the just-uploaded objects. */
+          let upload;
+          if (values.source === "upload") {
+            if (!values.file) {
+              showToast(t.errors.uploadMissing);
+              return;
+            }
+            upload = await uploadFile(values.file, "summary");
+            if (!upload) {
+              showToast(t.errors.upload);
+              return;
+            }
+          }
+
+          const exam = values.exam;
+          let examUpload;
+          if (exam?.file) {
+            examUpload = await uploadFile(exam.file, "exam");
+            if (!examUpload) showToast(t.errors.upload);
+          }
+
+          const created = await createNewMaterialAction(lang, {
+            title: subjectRef.title,
+            summary: {
+              title: values.title,
+              source: values.source,
+              content: values.content,
+              videos: values.videos,
+              storagePath: upload?.path,
+              fileName: upload?.fileName,
+              mimeType: upload?.mimeType,
+              fileSize: upload?.fileSize,
+            },
+            exam:
+              examUpload && exam
+                ? {
+                    type: exam.type,
+                    year: exam.year,
+                    semester: exam.semester,
+                    storagePath: examUpload.path,
+                    fileName: examUpload.fileName,
+                    mimeType: examUpload.mimeType,
+                    fileSize: examUpload.fileSize,
+                  }
+                : undefined,
+          });
+          if (!created.ok) {
+            showToast(errorText(created.errorKey));
+            return;
+          }
+
+          router.refresh();
+          pushActivity("summary", values.title);
+          if (values.videos.length > 0) pushActivity("video");
+          showToast(t.toast.createdSummary);
+          setOpenForm(null);
+          setEditing(null);
+          /* Navigate to the new subject workspace. router.refresh() is
+             fire-and-forget (not awaitable in this Next version); until the
+             fresh RSC props land, ContributeView renders a stable transitional
+             panel instead of a blank screen for the not-yet-resolved id. */
+          if (created.id) setView({ name: "subject", subjectId: created.id });
+          return;
+        } else {
+          return;
         }
 
         router.refresh();
@@ -280,7 +329,6 @@ export default function ContributorDashboard({
         showToast(t.toast.createdSummary);
         setOpenForm(null);
         setEditing(null);
-        setView({ name: "subject", subjectId });
       } finally {
         end();
       }
@@ -535,7 +583,7 @@ export default function ContributorDashboard({
     busy,
     now,
     view,
-    subjects: visible,
+    subjects,
     activities,
     openForm,
     editing,

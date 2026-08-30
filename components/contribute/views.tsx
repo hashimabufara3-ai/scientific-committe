@@ -660,8 +660,6 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
         <div className="mt-6">
           <SubjectForm
             t={t}
-            subjects={api.subjects}
-            excludeId={subject.id}
             initial={{ title: displayName(subject.title, subject.titleAr, lang) }}
             submitLabel={t.actions.save}
             onSubmit={(values) => api.onSaveSubject(subject.id, values)}
@@ -948,7 +946,21 @@ export function ContributeView({ api }: { api: Api }) {
     );
   }
   const subject = api.subjects.find((s) => s.id === view.subjectId);
-  if (!subject) return null;
+  if (!subject) {
+    /* The workspace id is not yet in the fresh server props (a Server Action
+       just committed and router.refresh() has not delivered the new catalog —
+       refresh() is fire-and-forget in this Next version). Render a stable
+       transitional panel instead of a blank screen so the UI never appears
+       broken during this window. */
+    return (
+      <>
+        <div className="py-20 text-center text-sm text-muted" aria-live="polite">
+          …
+        </div>
+        {dialog}
+      </>
+    );
+  }
   return (
     <>
       <SubjectWorkspace subject={subject} api={api} />

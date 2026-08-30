@@ -34,10 +34,6 @@ const ALLOWED_TYPES: Record<string, string> = {
 /* Preserve the prototype's 2 MB cap unless the UI shows a need to change it. */
 export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
 
-export function isValidUploadMime(mime: string): boolean {
-  return mime in ALLOWED_TYPES;
-}
-
 /* Validate a raw file upload: MIME must be on the allowlist and size must be
    within MAX_UPLOAD_BYTES. Rejects images whose browser-reported type is
    generic (e.g. an empty string or "application/octet-stream") as well, so the

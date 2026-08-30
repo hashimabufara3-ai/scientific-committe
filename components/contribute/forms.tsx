@@ -5,7 +5,6 @@ import { Field, GhostButton, Panel, PrimaryButton, SmallButton, TextArea, TextIn
 import { ClipboardIcon, CloseIcon, PlusIcon, SearchIcon, UploadIcon } from "../icons";
 import {
   displayName,
-  subjectMatches,
   subjectSearchText,
 } from "@/lib/content/mock-contributor-data";
 import type { ExamType, MockSubject, Semester } from "@/lib/content/mock-contributor-data";
@@ -144,8 +143,6 @@ function FileUploadField({
 
 export function SubjectForm({
   t,
-  subjects,
-  excludeId,
   initial,
   submitLabel,
   onSubmit,
@@ -153,8 +150,6 @@ export function SubjectForm({
   busy,
 }: {
   t: ContributeDict;
-  subjects: MockSubject[];
-  excludeId?: string;
   initial?: Partial<SubjectFormValues>;
   submitLabel: string;
   onSubmit: (values: SubjectFormValues) => void;
@@ -163,18 +158,10 @@ export function SubjectForm({
 }) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const nameId = useId();
-  /* Informational duplicate hint only. It must NOT block submission: the
-     `subjects` prop is the active catalog and can be stale (e.g. it can still
-     hold a row the contributor just soft-deleted), so a match here is not
-     authoritative. The server-side duplicate check in
-     createSubjectAction/createSummaryAction remains the single enforcement
-     point and rejects genuine active duplicates; a soft-deleted subject must
-     never prevent re-creating the same name. */
-  const duplicate =
-    title.trim().length > 0 &&
-    subjects.some(
-      (s) => s.id !== excludeId && subjectMatches(s, title),
-    );
+  /* No client-side duplicate detection here on purpose: the `subjects` prop is
+     the active catalog but can be stale, and the server is the single
+     authority. createSubjectAction / updateSubjectAction enforce the ACTIVE-only
+     duplicate rule; a soft-deleted subject must never block re-using its name. */
   const canSubmit = title.trim().length > 0;
 
   return (
@@ -200,14 +187,8 @@ export function SubjectForm({
             onChange={(e) => setTitle(e.target.value)}
             placeholder={t.forms.subjectNamePlaceholder}
             autoFocus
-            aria-invalid={duplicate}
           />
         </Field>
-        {duplicate && (
-          <p role="alert" className="text-xs text-red-300">
-            {t.forms.subjectDuplicate}
-          </p>
-        )}
       </FormShell>
     </form>
   );
@@ -324,18 +305,6 @@ export function SummaryForm({
   const fileInputId = useId();
   const newSubjectId = useId();
 
-  /* Informational duplicate hint for the "new subject" name only. It MUST NOT
-     block submission: `subjects` is the active catalog and can be stale (it
-     can still hold a row the contributor just soft-deleted), so a match here
-     is not authoritative. The server-side duplicate check is the single
-     enforcement point: it rejects genuine active duplicates and allows
-     re-creating a soft-deleted subject with the same name. */
-  const storeDuplicate =
-    mode === "new" && newSubjectTitle.trim().length > 0
-      ? subjects.find((s) => subjectMatches(s, newSubjectTitle))
-      : undefined;
-  const duplicate = storeDuplicate !== undefined;
-
   /* Upload source needs the file either newly chosen (create / replace) or
      already present and kept (editing metadata only). Content needs text. */
   const hasSource =
@@ -348,6 +317,11 @@ export function SummaryForm({
     : mode === "existing"
       ? selectedKey.length > 0
       : newSubjectTitle.trim().length > 0;
+  /* No client-side duplicate detection for the "new subject" name on purpose:
+     the `subjects` prop is the active catalog but can be stale, and the server
+     side (createNewMaterialAction -> findActiveDuplicateSubject) is the single
+     authority. Nothing here blocks submission or auto-selects a possibly
+     soft-deleted subject from the (possibly stale) client catalog. */
   const canSubmit =
     title.trim().length > 0 && hasSource && hasSubject && !file.fileError;
 
@@ -524,26 +498,8 @@ export function SummaryForm({
                       value={newSubjectTitle}
                       onChange={(e) => setNewSubjectTitle(e.target.value)}
                       placeholder={t.forms.subjectNewNamePlaceholder}
-                      aria-invalid={duplicate}
                     />
                   </Field>
-                  {storeDuplicate && (
-                    <div className="space-y-2">
-                      <p role="alert" className="text-xs text-red-300">
-                        {t.forms.subjectDuplicate}
-                      </p>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMode("existing");
-                          setSelectedKey(`subject:${storeDuplicate.id}`);
-                        }}
-                        className="text-xs font-medium text-accent underline underline-offset-2 transition-colors hover:text-foreground"
-                      >
-                        {t.forms.subjectDuplicateSelect}
-                      </button>
-                    </div>
-                  )}
                 </div>
               )}
             </div>

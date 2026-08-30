@@ -181,6 +181,129 @@ export async function createSubjectAction(
   return { ok: true, id: typeof id === "string" ? id : String(id) };
 }
 
+export type CreateNewMaterialInput = {
+  /* New material name (the subject). */
+  title: string;
+  summary: {
+    title: string;
+    source: "upload" | "content";
+    content?: string;
+    videos: string[];
+    /* Present only when source === "upload" (already uploaded to Storage). */
+    storagePath?: string;
+    fileName?: string;
+    mimeType?: string;
+    fileSize?: number;
+  };
+  /* Optional previous exam attached during new-material creation. */
+  exam?: {
+    type: ExamType;
+    year?: string;
+    semester?: Semester | "";
+    storagePath: string;
+    fileName: string;
+    mimeType?: string;
+    fileSize?: number;
+  };
+};
+
+/* Create a NEW material (subject) together with its first summary and an
+   optional previous exam in ONE atomic SECURITY DEFINER RPC. The subject,
+   summary and exam rows are inserted inside a single database transaction, so
+   the public (force-dynamic) catalog can never observe the subject before the
+   whole creation has committed. A rejected duplicate or any RPC failure rolls
+   back entirely -> no publicly visible incomplete subject is ever left behind.
+
+   Uploads to Storage happen on the client BEFORE this action (the RPC needs
+   the object paths). If this action then rejects, the just-uploaded objects
+   are removed as compensation so nothing is orphaned. The authoritative
+   active-only duplicate check (findActiveDuplicateSubject) runs here — client
+   state is never trusted. */
+export async function createNewMaterialAction(
+  lang: string,
+  input: CreateNewMaterialInput
+): Promise<SubjectActionResult> {
+  const session = await authorizeContributor(lang);
+  if (!session) return { ok: false, errorKey: "notAllowed" };
+
+  const title = input.title.trim();
+  const summaryTitle = input.summary.title.trim();
+  if (!title || !summaryTitle) return { ok: false, errorKey: "validation" };
+  if (input.summary.source === "upload" && !input.summary.storagePath) {
+    return { ok: false, errorKey: "uploadMissing" };
+  }
+  if (input.summary.source === "content" && !input.summary.content?.trim()) {
+    return { ok: false, errorKey: "validation" };
+  }
+  if (input.exam && (!input.exam.storagePath || !input.exam.fileName)) {
+    return { ok: false, errorKey: "uploadMissing" };
+  }
+
+  /* Best-effort compensation of already-uploaded objects when the transaction
+     did not happen (duplicate verdict / RPC failure). */
+  const compensateUploads = async () => {
+    if (input.summary.source === "upload" && input.summary.storagePath) {
+      try {
+        await removeResource(input.summary.storagePath);
+      } catch {
+        /* cleanup best-effort */
+      }
+    }
+    if (input.exam?.storagePath) {
+      try {
+        await removeResource(input.exam.storagePath);
+      } catch {
+        /* cleanup best-effort */
+      }
+    }
+  };
+
+  const supabase = await createClient();
+  const duplicateCheck = await findActiveDuplicateSubject(title);
+  if (duplicateCheck === "duplicate") {
+    await compensateUploads();
+    return { ok: false, errorKey: "duplicate" };
+  }
+  if (duplicateCheck === "error") {
+    await compensateUploads();
+    return { ok: false, errorKey: "generic" };
+  }
+
+  const { data: id, error } = await supabase.rpc("create_subject_with_summary", {
+    p_title: title,
+    p_summary_title: summaryTitle,
+    p_summary_source: input.summary.source,
+    p_summary_content:
+      input.summary.source === "content" ? input.summary.content?.trim() : null,
+    p_summary_videos:
+      input.summary.videos?.filter((v) => v.trim().length > 0) ?? [],
+    p_summary_storage_path:
+      input.summary.source === "upload" ? input.summary.storagePath : null,
+    p_summary_file_name:
+      input.summary.source === "upload" ? input.summary.fileName : null,
+    p_summary_mime_type:
+      input.summary.source === "upload" ? input.summary.mimeType : null,
+    p_summary_file_size:
+      input.summary.source === "upload" ? input.summary.fileSize : null,
+    p_exam_type: input.exam?.type ?? null,
+    p_exam_year: input.exam?.year || null,
+    p_exam_semester: input.exam?.semester || null,
+    p_exam_storage_path: input.exam?.storagePath ?? null,
+    p_exam_file_name: input.exam?.fileName ?? null,
+    p_exam_mime_type: input.exam?.mimeType ?? null,
+    p_exam_file_size: input.exam?.fileSize ?? null,
+  });
+
+  if (error) {
+    await compensateUploads();
+    return { ok: false, errorKey: mapRpcError(error.message) };
+  }
+
+  revalidateResources(lang);
+  revalidatePath(`/${lang}/summaries/${id}`);
+  return { ok: true, id: typeof id === "string" ? id : String(id) };
+}
+
 export async function updateSubjectAction(
   lang: string,
   id: string,
@@ -204,8 +327,11 @@ export async function updateSubjectAction(
 }
 
 /* Soft delete a subject, then remove the storage objects of its summaries and
-   exams as compensation. Storage paths are read with the service-role client
-   BEFORE the soft delete (RLS would hide them afterwards). */
+   exams as compensation. The SECURITY DEFINER RPC collects the child storage
+   paths AND performs the authoritative soft delete in ONE round trip, so the
+   action needs a single database call (path queries + delete used to be three
+   sequential calls). Storage cleanup stays best-effort and runs AFTER the DB
+   delete, exactly as before. */
 export async function deleteSubjectAction(
   lang: string,
   id: string
@@ -213,27 +339,21 @@ export async function deleteSubjectAction(
   const session = await authorizeContributor(lang);
   if (!session) return { ok: false, errorKey: "notAllowed" };
 
-  /* Read storage paths of child files while they are still visible. The two
-     independent queries run in parallel. */
-  const admin = createAdminClient();
-  const [summariesRes, examsRes] = await Promise.all([
-    admin.from("summaries").select("storage_path").eq("subject_id", id),
-    admin.from("exam_files").select("storage_path").eq("subject_id", id),
-  ]);
-  const paths = [
-    ...(summariesRes.data ?? []).map((s) => s.storage_path),
-    ...(examsRes.data ?? []).map((e) => e.storage_path),
-  ].filter((p): p is string => Boolean(p));
-
   const supabase = await createClient();
-  const { error } = await supabase.rpc("delete_subject", { p_id: id });
+  const { data: paths, error } = await supabase.rpc(
+    "delete_subject_with_storage",
+    { p_id: id }
+  );
   if (error) return { ok: false, errorKey: mapRpcError(error.message) };
 
   /* Best-effort compensation: remove each stored object with a small bounded
-     concurrency (safe for subjects with many files) instead of strictly
-     sequentially. DB deletion already succeeded and is authoritative; a failed
-     object removal only leaves an orphan for cleanup and never undoes it. */
-  await mapLimit(paths, 4, async (path) => {
+     concurrency (safe for subjects with many files). DB deletion already
+     succeeded and is authoritative; a failed object removal only leaves an
+     orphan for cleanup and never undoes it. */
+  const stored = (paths ?? [])
+    .map((row) => row.storage_path)
+    .filter((p): p is string => Boolean(p));
+  await mapLimit(stored, 4, async (path) => {
     try {
       await removeResource(path);
     } catch {

@@ -468,6 +468,36 @@ export type Database = {
         Args: { p_id: string };
         Returns: undefined;
       };
+      delete_subject_with_storage: {
+        Args: { p_id: string };
+        Returns: { storage_path: string | null }[];
+      };
+      create_subject_with_summary: {
+        Args: {
+          p_title: string;
+          p_title_ar?: string | null;
+          p_category?: string | null;
+          p_summary_title: string;
+          p_summary_title_ar?: string | null;
+          p_summary_description?: string | null;
+          p_summary_description_ar?: string | null;
+          p_summary_source?: string;
+          p_summary_content?: string | null;
+          p_summary_videos?: string[];
+          p_summary_storage_path?: string | null;
+          p_summary_file_name?: string | null;
+          p_summary_mime_type?: string | null;
+          p_summary_file_size?: number | null;
+          p_exam_type?: string | null;
+          p_exam_year?: string | null;
+          p_exam_semester?: string | null;
+          p_exam_storage_path?: string | null;
+          p_exam_file_name?: string | null;
+          p_exam_mime_type?: string | null;
+          p_exam_file_size?: number | null;
+        };
+        Returns: string;
+      };
       create_summary: {
         Args: {
           p_subject_id: string;
