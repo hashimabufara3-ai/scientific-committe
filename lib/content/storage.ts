@@ -76,18 +76,21 @@ export function examStoragePath(mime: string): string {
   return `exams/${uuid()}.${ext}`;
 }
 
-/* Upload validated bytes to Storage. Returns the object path on success.
+/* Upload validated bytes to Storage. Accepts the raw browser File/Blob (from
+   the multipart route handler) or an explicit ArrayBuffer, and passes it
+   straight to the Storage client so the bytes are not copied through an extra
+   ArrayBuffer round-trip on the server.
    Throws on failure — the caller should treat a thrown error as "upload
    failed; do not create a metadata row". */
 export async function uploadResource(
   path: string,
-  bytes: ArrayBuffer,
+  body: Blob | ArrayBuffer,
   mime: string
 ): Promise<void> {
   const admin = createAdminClient();
   const { error } = await admin.storage
     .from(RESOURCES_BUCKET)
-    .upload(path, bytes, { contentType: mime, upsert: false });
+    .upload(path, body, { contentType: mime, upsert: false });
   if (error) throw new Error(error.message);
 }
 

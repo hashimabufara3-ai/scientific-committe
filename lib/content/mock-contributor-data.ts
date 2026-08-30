@@ -220,3 +220,21 @@ export function subjectMatches(subject: MockSubject, candidate: string): boolean
     ? normalizeTitle(subject.titleAr) === normalized
     : false;
 }
+
+/* The pure, ACTIVE-only duplicate predicate shared by the server's
+   authoritative duplicate check. Given the candidate name and the ACTIVE
+   subject rows (each with `title` and a nullable `title_ar`), returns true
+   when an active subject matches in either language. NULL/empty `title_ar`
+   never produces a false match. Kept pure so the exact enforcement logic can
+   be exercised deterministically in tests and stays identical between the
+   server and any informational client hint. */
+export function subjectIsDuplicate(
+  activeSubjects: Array<{ title: string; title_ar: string | null }>,
+  candidate: string
+): boolean {
+  const normalized = normalizeTitle(candidate);
+  return activeSubjects.some((s) => {
+    if (normalizeTitle(s.title) === normalized) return true;
+    return s.title_ar ? normalizeTitle(s.title_ar) === normalized : false;
+  });
+}

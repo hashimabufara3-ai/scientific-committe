@@ -83,12 +83,13 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const bytes = await file.arrayBuffer();
     const path =
       kind === "exam"
         ? examStoragePath(file.type)
         : summaryStoragePath(file.type);
-    await uploadResource(path, bytes, file.type);
+    /* Pass the raw File directly to Storage — no intermediate ArrayBuffer
+       copy on the server. The Storage client accepts a Blob/File body. */
+    await uploadResource(path, file, file.type);
     return NextResponse.json({
       path,
       fileName: file.name,

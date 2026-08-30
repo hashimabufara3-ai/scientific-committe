@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { subjectMatches } from "@/lib/content/mock-contributor-data";
 import type {
   ActivityEvent,
   ActivityKind,
@@ -192,23 +191,23 @@ export default function ContributorDashboard({
     async (subjectRef: SubjectRef, values: SummaryFormValues) => {
       if (!begin()) return;
       try {
-        /* Resolve the material this summary attaches to:
+        /* Resolve the subject this summary attaches to:
            - a picked catalog subject id → that subject;
-           - a brand-new material name → a new subject, reusing an existing
-             one (matched in either language) instead of creating a duplicate. */
+           - a brand-new material name → created server-side, so the ACTIVE-only
+             duplicate check on the server is authoritative. We do NOT reuse a
+             match from the (possibly stale) `subjects` prop here: a soft-deleted
+             row could still be present in stale client state and reusing its id
+             would silently attach the summary to a deleted subject instead of
+             creating the new one. The server decides whether the name is a
+             genuine active duplicate. */
         let subjectId = subjectRef.subjectId;
         if (!subjectId && subjectRef.title) {
-          const existing = subjects.find((s) => subjectMatches(s, subjectRef.title!));
-          if (existing) {
-            subjectId = existing.id;
-          } else {
-            const created = await createSubjectAction(lang, subjectRef.title!);
-            if (!created.ok) {
-              showToast(errorText(created.errorKey));
-              return;
-            }
-            subjectId = created.id;
+          const created = await createSubjectAction(lang, subjectRef.title!);
+          if (!created.ok) {
+            showToast(errorText(created.errorKey));
+            return;
           }
+          subjectId = created.id;
         }
         if (!subjectId) return;
 
@@ -286,7 +285,7 @@ export default function ContributorDashboard({
         end();
       }
     },
-    [begin, end, errorText, lang, pushActivity, router, showToast, subjects, t],
+    [begin, end, errorText, lang, pushActivity, router, showToast, t],
   );
 
   const onCreateExam = useCallback(

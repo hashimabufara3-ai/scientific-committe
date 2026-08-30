@@ -163,12 +163,19 @@ export function SubjectForm({
 }) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const nameId = useId();
+  /* Informational duplicate hint only. It must NOT block submission: the
+     `subjects` prop is the active catalog and can be stale (e.g. it can still
+     hold a row the contributor just soft-deleted), so a match here is not
+     authoritative. The server-side duplicate check in
+     createSubjectAction/createSummaryAction remains the single enforcement
+     point and rejects genuine active duplicates; a soft-deleted subject must
+     never prevent re-creating the same name. */
   const duplicate =
     title.trim().length > 0 &&
     subjects.some(
       (s) => s.id !== excludeId && subjectMatches(s, title),
     );
-  const canSubmit = title.trim().length > 0 && !duplicate;
+  const canSubmit = title.trim().length > 0;
 
   return (
     <form
@@ -317,6 +324,12 @@ export function SummaryForm({
   const fileInputId = useId();
   const newSubjectId = useId();
 
+  /* Informational duplicate hint for the "new subject" name only. It MUST NOT
+     block submission: `subjects` is the active catalog and can be stale (it
+     can still hold a row the contributor just soft-deleted), so a match here
+     is not authoritative. The server-side duplicate check is the single
+     enforcement point: it rejects genuine active duplicates and allows
+     re-creating a soft-deleted subject with the same name. */
   const storeDuplicate =
     mode === "new" && newSubjectTitle.trim().length > 0
       ? subjects.find((s) => subjectMatches(s, newSubjectTitle))
@@ -336,7 +349,7 @@ export function SummaryForm({
       ? selectedKey.length > 0
       : newSubjectTitle.trim().length > 0;
   const canSubmit =
-    title.trim().length > 0 && hasSource && hasSubject && !duplicate && !file.fileError;
+    title.trim().length > 0 && hasSource && hasSubject && !file.fileError;
 
   /* Whether an optional previous exam was attached (only meaningful when
      creating a NEW subject). The exam is entirely optional and never gates
@@ -511,6 +524,7 @@ export function SummaryForm({
                       value={newSubjectTitle}
                       onChange={(e) => setNewSubjectTitle(e.target.value)}
                       placeholder={t.forms.subjectNewNamePlaceholder}
+                      aria-invalid={duplicate}
                     />
                   </Field>
                   {storeDuplicate && (

@@ -6,7 +6,7 @@ import { getSessionRole } from "../../../lib/auth/authorize";
 import { createAdminClient, createClient } from "../../../lib/auth/supabase-server";
 import { checkRateLimit, LIMITERS } from "../../../lib/security/rate-limit";
 import { removeResource } from "../../../lib/content/storage";
-import { normalizeTitle } from "../../../lib/content/mock-contributor-data";
+import { subjectIsDuplicate } from "../../../lib/content/mock-contributor-data";
 import type { ExamType, Semester } from "../../../lib/content/mock-contributor-data";
 
 /* Server actions for the Resources/Summaries contributor workflow.
@@ -92,6 +92,31 @@ function revalidateResources(lang: string) {
   revalidatePath(`/${lang}/contribute`);
 }
 
+/* Run `mapper` over items with a small, bounded concurrency so a subject with
+   many stored objects is cleaned up concurrently without risking an
+   uncontrolled burst of parallel HTTP/Storage requests. Resolves once every
+   task has settled; callers decide how to treat individual failures. */
+async function mapLimit<T, R>(
+  items: T[],
+  limit: number,
+  mapper: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let cursor = 0;
+  async function worker() {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await mapper(items[index]);
+    }
+  }
+  const workers = Array.from(
+    { length: Math.min(limit, items.length) },
+    () => worker()
+  );
+  await Promise.all(workers);
+  return results;
+}
+
 /* Authoritative duplicate-name check. Only ACTIVE subjects block creation:
    soft-deleted materials (is_active = false) are intentionally ignored so a
    contributor can re-create a subject with the same name after deleting it.
@@ -99,21 +124,29 @@ function revalidateResources(lang: string) {
    collapse inner whitespace). This is a SECURITY DEFINER-guarded read via the
    authenticated server client — the DB has no unique index on subjects.title
    (soft delete means multiple rows may reasonably share a name), so this
-   check is the enforcement point; it must agree with the client check. */
+   check is the enforcement point.
+
+   The result distinguishes three cases so a database/query failure is never
+   mistaken for "no duplicate" (which would silently allow a duplicate) nor
+   for "duplicate" (which would falsely block a valid new subject):
+     - "duplicate" : an ACTIVE subject matches the name.
+     - "ok"        : no active match.
+     - "error"     : the query itself failed (caller must surface a real
+                     internal error, not a duplicate verdict).
+   An empty result set is "ok", not "error" — supabase-js returns data: [] on
+   success and data: null only when the query errored. */
+type DuplicateCheck = "duplicate" | "ok" | "error";
+
 async function findActiveDuplicateSubject(
   title: string
-): Promise<boolean> {
+): Promise<DuplicateCheck> {
   const supabase = await createClient();
-  const { data: activeSubjects } = await supabase
+  const { data: activeSubjects, error } = await supabase
     .from("subjects")
     .select("title, title_ar")
     .eq("is_active", true);
-  if (!activeSubjects) return false;
-  const normalized = normalizeTitle(title);
-  return activeSubjects.some((s) => {
-    if (normalizeTitle(s.title) === normalized) return true;
-    return s.title_ar ? normalizeTitle(s.title_ar) === normalized : false;
-  });
+  if (error) return "error";
+  return subjectIsDuplicate(activeSubjects ?? [], title) ? "duplicate" : "ok";
 }
 
 /* ---- Subjects ------------------------------------------------------------ */
@@ -129,8 +162,14 @@ export async function createSubjectAction(
   if (!trimmed) return { ok: false, errorKey: "validation" };
 
   const supabase = await createClient();
-  if (await findActiveDuplicateSubject(trimmed)) {
+  const duplicateCheck = await findActiveDuplicateSubject(trimmed);
+  if (duplicateCheck === "duplicate") {
     return { ok: false, errorKey: "duplicate" };
+  }
+  if (duplicateCheck === "error") {
+    /* A DB/query failure must surface as a real internal error, not a false
+       "duplicate" — and not silently allow a duplicate. */
+    return { ok: false, errorKey: "generic" };
   }
 
   const { data: id, error } = await supabase.rpc("create_subject", {
@@ -174,33 +213,33 @@ export async function deleteSubjectAction(
   const session = await authorizeContributor(lang);
   if (!session) return { ok: false, errorKey: "notAllowed" };
 
-  /* Read storage paths of child files while they are still visible. */
+  /* Read storage paths of child files while they are still visible. The two
+     independent queries run in parallel. */
   const admin = createAdminClient();
-  const { data: summaries } = await admin
-    .from("summaries")
-    .select("storage_path")
-    .eq("subject_id", id);
-  const { data: exams } = await admin
-    .from("exam_files")
-    .select("storage_path")
-    .eq("subject_id", id);
+  const [summariesRes, examsRes] = await Promise.all([
+    admin.from("summaries").select("storage_path").eq("subject_id", id),
+    admin.from("exam_files").select("storage_path").eq("subject_id", id),
+  ]);
   const paths = [
-    ...(summaries ?? []).map((s) => s.storage_path),
-    ...(exams ?? []).map((e) => e.storage_path),
+    ...(summariesRes.data ?? []).map((s) => s.storage_path),
+    ...(examsRes.data ?? []).map((e) => e.storage_path),
   ].filter((p): p is string => Boolean(p));
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("delete_subject", { p_id: id });
   if (error) return { ok: false, errorKey: mapRpcError(error.message) };
 
-  /* Best-effort compensation: remove each stored object. */
-  for (const path of paths) {
+  /* Best-effort compensation: remove each stored object with a small bounded
+     concurrency (safe for subjects with many files) instead of strictly
+     sequentially. DB deletion already succeeded and is authoritative; a failed
+     object removal only leaves an orphan for cleanup and never undoes it. */
+  await mapLimit(paths, 4, async (path) => {
     try {
       await removeResource(path);
     } catch {
       /* orphaned object left for manual cleanup — safe to continue */
     }
-  }
+  });
 
   revalidateResources(lang);
   revalidatePath(`/${lang}/summaries/${id}`);
