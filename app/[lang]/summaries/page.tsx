@@ -5,7 +5,6 @@ import { getSubjects } from "../../../lib/content/data-access";
 import SectionHeading from "../../../components/section-heading";
 import Reveal from "../../../components/reveal";
 import UnifiedLibrary from "../../../components/unified-library";
-import AddSummaryButton from "../../../components/add-summary-button";
 
 /* Time-based ISR: regenerate this SSG page at most every 60s so newly created
    subjects appear without a rebuild (see comment on ResourcesPage below). */
@@ -69,12 +68,6 @@ export default async function ResourcesPage({
               subtitle={dict.resourcesPage.subtitle}
               align="center"
             />
-            <div className="mt-6 flex justify-center lg:absolute lg:end-0 lg:top-0 lg:mt-0">
-              <AddSummaryButton
-                lang={lang}
-                label={dict.resourcesPage.addSummary}
-              />
-            </div>
           </div>
         </Reveal>
       </UnifiedLibrary>
