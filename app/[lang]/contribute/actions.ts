@@ -1,12 +1,12 @@
 "use server";
 
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getSessionRole } from "../../../lib/auth/authorize";
 import { createAdminClient, createClient } from "../../../lib/auth/supabase-server";
 import { checkRateLimit, LIMITERS } from "../../../lib/security/rate-limit";
 import { removeResource } from "../../../lib/content/storage";
-import { RESOURCES_CATALOG_TAG } from "../../../lib/content/data-access";
+import { normalizeTitle } from "../../../lib/content/mock-contributor-data";
 import type { ExamType, Semester } from "../../../lib/content/mock-contributor-data";
 
 /* Server actions for the Resources/Summaries contributor workflow.
@@ -34,6 +34,7 @@ export type ResourceErrorKey =
   | "validation"
   | "notAuthenticated"
   | "uploadMissing"
+  | "duplicate"
   | "generic";
 
 export type SubjectActionResult = {
@@ -82,16 +83,37 @@ async function authorizeContributor(lang: string) {
 }
 
 function revalidateResources(lang: string) {
-  /* Invalidate the public catalog via its cache TAG, not revalidatePath() on
-     the /[lang]/summaries route. The summaries page is a build-time ISR page
-     under dynamicParams=false; in Next 16 an on-demand revalidatePath() on it
-     can throw NoFallbackError and cache a 404 for the route. Tagging the data
-     (see getCachedSubjects) and revalidating the tag avoids that path entirely
-     and still makes the page regenerate on its next request. */
-  revalidateTag(RESOURCES_CATALOG_TAG, "max");
-  /* The contributor workspace is force-dynamic, so a path revalidate here is
-     harmless (no build-time page to poison). */
+  /* The public /[lang]/summaries listing is fully dynamic (force-dynamic) and
+     reads the current active catalog straight from the database on every
+     request, so no revalidation is needed for it — there is no ISR cache to
+     poison or stale data to clear. The contributor workspace is also
+     force-dynamic; the path revalidate below is a harmless best-effort nudge
+     for the client Router Cache after a mutation. */
   revalidatePath(`/${lang}/contribute`);
+}
+
+/* Authoritative duplicate-name check. Only ACTIVE subjects block creation:
+   soft-deleted materials (is_active = false) are intentionally ignored so a
+   contributor can re-create a subject with the same name after deleting it.
+   Matching mirrors the client's normalizeTitle() rules (trim, case-fold,
+   collapse inner whitespace). This is a SECURITY DEFINER-guarded read via the
+   authenticated server client — the DB has no unique index on subjects.title
+   (soft delete means multiple rows may reasonably share a name), so this
+   check is the enforcement point; it must agree with the client check. */
+async function findActiveDuplicateSubject(
+  title: string
+): Promise<boolean> {
+  const supabase = await createClient();
+  const { data: activeSubjects } = await supabase
+    .from("subjects")
+    .select("title, title_ar")
+    .eq("is_active", true);
+  if (!activeSubjects) return false;
+  const normalized = normalizeTitle(title);
+  return activeSubjects.some((s) => {
+    if (normalizeTitle(s.title) === normalized) return true;
+    return s.title_ar ? normalizeTitle(s.title_ar) === normalized : false;
+  });
 }
 
 /* ---- Subjects ------------------------------------------------------------ */
@@ -107,6 +129,10 @@ export async function createSubjectAction(
   if (!trimmed) return { ok: false, errorKey: "validation" };
 
   const supabase = await createClient();
+  if (await findActiveDuplicateSubject(trimmed)) {
+    return { ok: false, errorKey: "duplicate" };
+  }
+
   const { data: id, error } = await supabase.rpc("create_subject", {
     p_title: trimmed,
   });

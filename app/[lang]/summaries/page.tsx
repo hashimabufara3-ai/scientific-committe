@@ -1,14 +1,25 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDictionary, hasLocale } from "../dictionaries";
-import { getCachedSubjects } from "../../../lib/content/data-access";
+import { getSubjects } from "../../../lib/content/data-access";
 import SectionHeading from "../../../components/section-heading";
 import Reveal from "../../../components/reveal";
 import UnifiedLibrary from "../../../components/unified-library";
 
-/* Time-based ISR: regenerate this SSG page at most every 60s so newly created
-   subjects appear without a rebuild (see comment on ResourcesPage below). */
-export const revalidate = 60;
+/* The public Resources page renders dynamically and reads the current active
+   catalog (subjects + their summaries/exams) straight from PostgreSQL via the
+   anonymous, cookie-free read client on every request.
+
+   Freshness: this route is NOT statically generated or ISR-cached. It is fully
+   dynamic (see `dynamic` below), so additions, edits and soft-deletes made by
+   contributors are reflected for the next visitor immediately, on every Render
+   instance, with no ISR cache to poison or revalidate and no per-instance
+   stale-data window. The client Router Cache treats dynamic routes with
+   staleTimes.dynamic = 0, so returning to this page always fetches fresh data.
+
+   File bytes are never rendered here — cards carry metadata and fetch signed
+   URLs on demand. */
+export const dynamic = "force-dynamic";
 
 export async function generateMetadata({
   params,
@@ -19,31 +30,13 @@ export async function generateMetadata({
   return { title: dict.resourcesPage.title, description: dict.resourcesPage.subtitle };
 }
 
-/* The public Resources page pulls its catalog from PostgreSQL (active subjects
-   + their summaries/exams) via the anonymous, cookie-free read client.
-
-   Freshness: this route is statically generated at build time (the [lang]
-   layout uses generateStaticParams + dynamicParams=false), and in Next 16
-   on-demand revalidatePath() does NOT regenerate build-time pages reliably —
-   it can throw NoFallbackError and 404 the route instead of re-rendering it.
-   We therefore NEVER call revalidatePath() on this route. Instead:
-
-     - the catalog data is read through the tagged, cached getCachedSubjects()
-       (cache tag RESOURCES_CATALOG_TAG), and
-     - contributor server actions call revalidateTag(RESOURCES_CATALOG_TAG)
-       after a mutation, which invalidates just the data and lets this ISR page
-       regenerate normally on its next request — no NoFallbackError, no 404.
-     - time-based ISR (revalidate below) remains as a safety net.
-
-   File bytes are never rendered here — cards carry metadata and fetch signed
-   URLs on demand. */
 export default async function ResourcesPage({
   params,
 }: PageProps<"/[lang]/summaries">) {
   const { lang } = await params;
   if (!hasLocale(lang)) notFound();
   const dict = await getDictionary(lang);
-  const subjects = await getCachedSubjects();
+  const subjects = await getSubjects();
 
   return (
     <main id="main-content" className="relative overflow-hidden pb-24">

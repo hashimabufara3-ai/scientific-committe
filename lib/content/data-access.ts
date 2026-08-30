@@ -15,7 +15,6 @@
      when they explicitly choose View/Download.
 */
 
-import { unstable_cache } from "next/cache";
 import { createAnonClient } from "../auth/supabase-anon";
 import { createAdminClient } from "../auth/supabase-server";
 import { createSignedResourceUrl } from "./storage";
@@ -151,28 +150,6 @@ export async function getSubjects(): Promise<MockSubject[]> {
 
   return [...bySubject.values()];
 }
-
-/* Cache tag for the public resource catalog (active subjects/summaries/exams).
-   Contributor server actions revalidate this tag (revalidateTag) instead of
-   calling revalidatePath() on the /[lang]/summaries ISR page, because in Next
-   16 an on-demand revalidatePath against a build-time prerendered page under
-   dynamicParams=false can throw NoFallbackError and cache a 404 for the route
-   (that is exactly the production bug this avoids). */
-export const RESOURCES_CATALOG_TAG = "resources-catalog";
-
-/* The catalog page gets its data through this cached variant so a resource
-   mutation can invalidate it via revalidateTag(RESOURCES_CATALOG_TAG, "max").
-   The raw getSubjects() above remains the uncached read used by dynamic pages
-   (e.g. the force-dynamic contributor workspace). The cached copy is tagged
-   and time-bounded (60s) to stay consistent with the page's ISR window. */
-export const getCachedSubjects = unstable_cache(
-  getSubjects,
-  ["subjects-active"],
-  {
-    tags: [RESOURCES_CATALOG_TAG],
-    revalidate: 60,
-  }
-);
 
 /* Fetch one active subject (metadata only) with its active summaries/exams,
    or null if it does not exist / is inactive. */

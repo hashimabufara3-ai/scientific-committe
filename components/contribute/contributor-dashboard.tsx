@@ -149,11 +149,13 @@ export default function ContributorDashboard({
           return t.errors.uploadMissing;
         case "notAuthenticated":
           return t.errors.notAllowed;
+        case "duplicate":
+          return t.forms.subjectDuplicate;
         default:
           return t.errors.generic;
       }
     },
-    [t.errors],
+    [t.errors, t.forms],
   );
 
   /* Single re-entrancy guard for every mutation: keeps double submission from
