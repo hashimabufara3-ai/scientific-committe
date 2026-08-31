@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRole } from "./auth/use-auth";
+import { useRole, useUser } from "./auth/use-auth";
 import { PlusIcon } from "./icons";
 
 /* Entry point to the existing contributor dashboard (/contribute). Visible
@@ -14,7 +14,8 @@ export default function AddSummaryButton({
   lang: string;
   label: string;
 }) {
-  const { role } = useRole();
+  const { user } = useUser();
+  const { role } = useRole(user?.id ?? null);
 
   const canAdd =
     role === "contributor" || role === "admin" || role === "owner";

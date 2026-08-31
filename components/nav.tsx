@@ -28,7 +28,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const { user } = useUser();
-  const { role } = useRole();
+  const { role } = useRole(user?.id ?? null);
 
   useEffect(() => {
     if (!open) return;

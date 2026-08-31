@@ -59,44 +59,47 @@ export function useUser() {
   return { user, loading };
 }
 
-/* Reactive current-role state for the navbar. Reads the caller's own profile
-   row through RLS (every authenticated user may read their own profile) and
-   refreshes whenever the session user changes. Navigation visibility is UX
-   only — server-side requireRole() is the authoritative gate. */
-export function useRole() {
-  const { user } = useUser();
+/* Reactive current-role state for the navbar. Takes the caller's own user id
+   (a stable primitive) and reads that profile row through RLS (every
+   authenticated user may read their own profile). The effect depends only on
+   the user id, never the whole user object reference, so two representations
+   of the same authenticated user (the getUser() response and the
+   INITIAL_SESSION session) do not trigger a second profile query. Navigation
+   visibility is UX only — server-side requireRole() is the authoritative
+   gate. */
+export function useRole(userId: string | null) {
   const [state, setState] = useState<{
     userId: string | null;
     role: Role | null;
   }>({ userId: null, role: null });
 
   useEffect(() => {
-    if (!user) return;
+    if (!userId) return;
     let active = true;
 
     import("../../lib/auth/supabase-browser")
       .then(({ createClient }) => createClient())
       .then((supabase) =>
-        supabase.from("profiles").select("role").eq("id", user.id).maybeSingle()
+        supabase.from("profiles").select("role").eq("id", userId).maybeSingle()
       )
       .then(({ data }) => {
         if (!active) return;
         setState({
-          userId: user.id,
+          userId,
           role: isRole(data?.role) ? data.role : null,
         });
       })
       .catch(() => {
-        if (active) setState({ userId: user.id, role: null });
+        if (active) setState({ userId, role: null });
       });
 
     return () => {
       active = false;
     };
-  }, [user]);
+  }, [userId]);
 
   /* Only surface a role that belongs to the current session user — never a
      stale role from a previously signed-in account. */
-  const role = user && state.userId === user.id ? state.role : null;
+  const role = userId && state.userId === userId ? state.role : null;
   return { role };
 }
