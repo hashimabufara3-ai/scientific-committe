@@ -485,6 +485,11 @@ function MemberRow({
   users,
   onEdit,
   onDelete,
+  showDelete,
+  deleteState,
+  deleteAction,
+  deletePending,
+  onCancelDelete,
 }: {
   member: CommitteeMember;
   lang: string;
@@ -492,6 +497,11 @@ function MemberRow({
   users: SiteUser[];
   onEdit: (m: CommitteeMember) => void;
   onDelete: (m: CommitteeMember) => void;
+  showDelete: boolean;
+  deleteState: CommitteeMemberActionResult;
+  deleteAction: (payload: FormData) => void;
+  deletePending: boolean;
+  onCancelDelete: () => void;
 }) {
   const linkedUser = member.user_id
     ? users.find((u) => u.id === member.user_id)
@@ -531,6 +541,41 @@ function MemberRow({
           </SmallButton>
         </div>
       </div>
+
+      {/* Delete confirmation — rendered INSIDE the selected member's card,
+          immediately below its content. Only the member whose id matches the
+          delete target shows it; other cards stay unchanged. */}
+      {showDelete && (
+        <div className="mt-4 border-t border-white/10 pt-4">
+          <p className="text-sm text-foreground">
+            {t.deleteConfirm}{" "}
+            <span className="font-semibold">
+              {member.name_en} / {member.name_ar}
+            </span>
+          </p>
+          <div className="mt-4 flex gap-3">
+            <form action={deleteAction}>
+              <input type="hidden" name="lang" value={lang} />
+              <input type="hidden" name="targetId" value={member.id} />
+              <PrimaryButton
+                type="submit"
+                disabled={deletePending}
+                className="!bg-red-500/20 !border-red-400/40 !text-red-300 hover:!bg-red-500/30"
+              >
+                {deletePending ? t.saving : t.delete}
+              </PrimaryButton>
+            </form>
+            <SmallButton variant="ghost" onClick={onCancelDelete}>
+              {t.cancel}
+            </SmallButton>
+          </div>
+          {deleteState.errorKey && (
+            <p role="alert" className="mt-3 text-xs text-red-300">
+              {t.formErrors.generic}
+            </p>
+          )}
+        </div>
+      )}
     </Panel>
   );
 }
@@ -688,39 +733,6 @@ export default function CommitteeMembersSection({
         </div>
       )}
 
-      {/* Delete confirmation */}
-      {showDeletePanel && deleting && (
-        <Panel className="p-6">
-          <p className="text-sm text-foreground">
-            {t.deleteConfirm}{" "}
-            <span className="font-semibold">
-              {deleting.name_en} / {deleting.name_ar}
-            </span>
-          </p>
-          <div className="mt-4 flex gap-3">
-            <form action={deleteAction}>
-              <input type="hidden" name="lang" value={lang} />
-              <input type="hidden" name="targetId" value={deleting.id} />
-              <PrimaryButton
-                type="submit"
-                disabled={deletePending}
-                className="!bg-red-500/20 !border-red-400/40 !text-red-300 hover:!bg-red-500/30"
-              >
-                {deletePending ? t.saving : t.delete}
-              </PrimaryButton>
-            </form>
-            <SmallButton variant="ghost" onClick={() => setDeleting(null)}>
-              {t.cancel}
-            </SmallButton>
-          </div>
-          {deleteState.errorKey && (
-            <p role="alert" className="mt-3 text-xs text-red-300">
-              {t.formErrors.generic}
-            </p>
-          )}
-        </Panel>
-      )}
-
       {/* Empty state — no members at all */}
       {!hasMembers && !showForm && !editing && (
         <Panel className="p-8 text-center">
@@ -783,6 +795,11 @@ export default function CommitteeMembersSection({
                   savedScrollY.current = window.scrollY;
                   setDeleting(m);
                 }}
+                showDelete={Boolean(showDeletePanel && member.id === deleting?.id)}
+                deleteState={deleteState}
+                deleteAction={deleteAction}
+                deletePending={deletePending}
+                onCancelDelete={() => setDeleting(null)}
               />
             ))
           )}
