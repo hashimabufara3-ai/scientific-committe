@@ -433,7 +433,7 @@
       "empty": "No committee members yet. Add the first one.",
       "emptyTitle": "No committee members yet",
       "emptyDescription": "When a new member joins the committee, you can add them here so they appear in the \"About Us\" section of the website.",
-      "note": "Note: Committee Members listed here are the people displayed in the \"About Us\" section. They do not need to have an account or be registered on the website.",
+      "note": "Note: Committee Members listed here are the people displayed in the \"About Us\" section. They need a registered account on the website.",
       "genderHelper": "Gender determines which visual design is used for the member in the About Us section: Male = male design, Female = female design.",
       "websiteUser": "Website user",
       "websiteUserHelper": "Optional. Link this committee member to an existing website account.",
