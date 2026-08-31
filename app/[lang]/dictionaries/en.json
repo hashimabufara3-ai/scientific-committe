@@ -387,6 +387,7 @@
     "delete": "Delete",
     "deleteConfirm": "Delete this account permanently? This cannot be undone. If they are a committee member, their About Us record will also be removed.",
     "saving": "Saving…",
+    "deleting": "Deleting…",
     "cancel": "Cancel",
     "transitions": {
       "toStudent": "Make student",

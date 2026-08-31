@@ -189,7 +189,7 @@ function MemberRow({
                     type="submit"
                     disabled={deletePending}
                   >
-                    {deletePending ? t.saving : t.delete}
+                    {deletePending ? t.deleting : t.delete}
                   </SmallButton>
                 </form>
                 <SmallButton
