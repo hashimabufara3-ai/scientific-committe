@@ -934,6 +934,7 @@ export function ContributeView({ api }: { api: Api }) {
         target={api.deleteTarget}
         onCancel={api.onCloseDelete}
         onConfirm={api.onConfirmDelete}
+        pending={api.busy}
       />
     );
   const view = api.view;

@@ -14,11 +14,16 @@ export function DeleteDialog({
   target,
   onCancel,
   onConfirm,
+  pending = false,
 }: {
   t: ContributeDict;
   target: DeleteTarget;
   onCancel: () => void;
   onConfirm: () => void;
+  /* True while the delete Server Action is actually running. Keeps the dialog
+     open so the in-flight state is visible; disables both buttons and swaps
+     the confirm label to "Deleting…" with a spinner. */
+  pending?: boolean;
 }) {
   const titleId = useId();
   const bodyId = useId();
@@ -97,17 +102,26 @@ export function DeleteDialog({
             ref={cancelRef}
             type="button"
             onClick={onCancel}
-            className="btn-ghost !px-5 !py-2"
+            disabled={pending}
+            className="btn-ghost !px-5 !py-2 disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t.delete.cancel}
           </button>
           <button
             type="button"
             onClick={onConfirm}
-            className="inline-flex items-center gap-2 rounded-full border border-red-400/40 bg-red-500/10 px-5 py-2 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/20"
+            disabled={pending}
+            className="inline-flex items-center gap-2 rounded-full border border-red-400/40 bg-red-500/10 px-5 py-2 text-sm font-semibold text-red-300 transition-colors hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-60"
           >
-            <TrashIcon className="h-4 w-4" />
-            {t.delete.confirm}
+            {pending ? (
+              <span
+                aria-hidden="true"
+                className="h-4 w-4 animate-spin rounded-full border-2 border-red-300/40 border-t-red-300"
+              />
+            ) : (
+              <TrashIcon className="h-4 w-4" />
+            )}
+            {pending ? t.delete.deleting : t.delete.confirm}
           </button>
         </div>
       </div>

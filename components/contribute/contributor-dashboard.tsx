@@ -524,8 +524,11 @@ export default function ContributorDashboard({
     const target = deleteTarget;
     if (!target) return;
     if (!begin()) return;
-    setDeleteTarget(null);
     setEditing(null);
+    /* Keep the confirmation dialog open while the delete Server Action is
+       running so the pending state (see `pending` prop) stays visible on the
+       confirm button; it is closed only once the delete resolves. On failure
+       it stays open so the contributor can retry. */
     try {
       if (target.kind === "subject") {
         const r = await deleteSubjectAction(lang, target.id);
@@ -560,6 +563,7 @@ export default function ContributorDashboard({
       router.refresh();
       pushActivity("delete", target.name);
       showToast(t.toast.deleted);
+      setDeleteTarget(null);
     } finally {
       end();
     }

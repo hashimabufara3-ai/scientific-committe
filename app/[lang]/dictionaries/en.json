@@ -247,7 +247,8 @@
       "summaryBody": "This will permanently remove the summary.",
       "examBody": "This will permanently remove this previous exam.",
       "cancel": "Cancel",
-      "confirm": "Delete"
+      "confirm": "Delete",
+      "deleting": "Deleting…"
     }
   },
   "contactPage": {
