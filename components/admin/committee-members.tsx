@@ -544,7 +544,10 @@ function MemberRow({
 
       {/* Delete confirmation — rendered INSIDE the selected member's card,
           immediately below its content. Only the member whose id matches the
-          delete target shows it; other cards stay unchanged. */}
+          delete target shows it; other cards stay unchanged. Matches the
+          Contributor DeleteDialog pending UX: while the delete action is
+          running both buttons are disabled and the confirm swaps in a spinner
+          plus "Deleting…". */}
       {showDelete && (
         <div className="mt-4 border-t border-white/10 pt-4">
           <p className="text-sm text-foreground">
@@ -562,10 +565,20 @@ function MemberRow({
                 disabled={deletePending}
                 className="!bg-red-500/20 !border-red-400/40 !text-red-300 hover:!bg-red-500/30"
               >
-                {deletePending ? t.saving : t.delete}
+                {deletePending && (
+                  <span
+                    aria-hidden="true"
+                    className="h-4 w-4 animate-spin rounded-full border-2 border-red-300/40 border-t-red-300"
+                  />
+                )}
+                {deletePending ? t.deleting : t.delete}
               </PrimaryButton>
             </form>
-            <SmallButton variant="ghost" onClick={onCancelDelete}>
+            <SmallButton
+              variant="ghost"
+              onClick={onCancelDelete}
+              disabled={deletePending}
+            >
               {t.cancel}
             </SmallButton>
           </div>

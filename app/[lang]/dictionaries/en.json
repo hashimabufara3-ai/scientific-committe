@@ -426,6 +426,7 @@
       "delete": "Delete",
       "deleteConfirm": "Remove this person from the committee? Their website account will not be deleted.",
       "saving": "Saving…",
+      "deleting": "Deleting…",
       "saved": "Member saved.",
       "deleted": "Member deleted.",
       "empty": "No committee members yet. Add the first one.",
