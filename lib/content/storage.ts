@@ -1,4 +1,5 @@
 import { createAdminClient } from "../auth/supabase-server";
+import { logger } from "../logger";
 
 /* Server-side env access for the storage REST helpers (the admin client does
    not expose the project URL/keys). These must never be imported by browser
@@ -191,10 +192,23 @@ export async function readStoredObjectPrefix(
       },
       cache: "no-store",
     });
-  } catch {
+  } catch (err) {
+    /* Diagnostic only — same null return as before. */
+    logger.warn("finalize: storage range-read transport failed", {
+      step: "range-read",
+      error: err instanceof Error ? err.message : String(err),
+    });
     return null;
   }
-  if (!res.ok || !res.body) return null;
+  if (!res.ok || !res.body) {
+    /* Diagnostic only — same null return as before. */
+    logger.warn("finalize: storage range-read rejected", {
+      step: "range-read",
+      status: res.status,
+      ok: res.ok,
+    });
+    return null;
+  }
 
   const reader = res.body.getReader();
   const out = new Uint8Array(maxBytes);
@@ -235,28 +249,71 @@ export async function finalizeStoredUpload(input: {
   | { ok: true; finalPath: string; size: number }
   | { ok: false; error: "not_found" | "empty" | "too_large" | "invalid_type" | "move_failed" }
 > {
+  /* Diagnostic pacing log. NEVER log the quarantine path, the user id, signed
+     URLs, tokens, or credentials — only kind + safe numeric/boolean fields. */
+  logger.info("finalize upload: begin", { kind: input.kind });
+
   /* Only ever finalize an object the current user was issued a token for. */
   if (!input.quarantinePath.startsWith(`${QUARANTINE_PREFIX}${input.userId}/`)) {
     await safeRemove(input.quarantinePath);
+    logger.warn("finalize failed: quarantine path mismatch", {
+      step: "prefix",
+      kind: input.kind,
+    });
     return { ok: false, error: "invalid_type" };
   }
 
   const info = await getStoredObjectInfo(input.quarantinePath);
   if (!info) {
     await safeRemove(input.quarantinePath);
+    logger.warn("finalize failed: object info unavailable", {
+      step: "info",
+      kind: input.kind,
+      objectExists: false,
+    });
     return { ok: false, error: "not_found" };
   }
   if (info.size <= 0) {
     await safeRemove(input.quarantinePath);
+    logger.warn("finalize failed: empty object", {
+      step: "info",
+      kind: input.kind,
+      objectExists: true,
+      size: info.size,
+    });
     return { ok: false, error: "empty" };
   }
   if (info.size > MAX_UPLOAD_BYTES) {
     await safeRemove(input.quarantinePath);
+    logger.warn("finalize failed: object over size cap", {
+      step: "info",
+      kind: input.kind,
+      objectExists: true,
+      size: info.size,
+      maxBytes: MAX_UPLOAD_BYTES,
+    });
     return { ok: false, error: "too_large" };
   }
+
   const header = await readStoredObjectPrefix(input.quarantinePath, PDF_HEADER_MAX);
-  if (!header || !isPdfSignature(header)) {
+  if (!header) {
     await safeRemove(input.quarantinePath);
+    logger.warn("finalize failed: header unreadable", {
+      step: "range-read",
+      kind: input.kind,
+      objectExists: true,
+      size: info.size,
+    });
+    return { ok: false, error: "invalid_type" };
+  }
+  if (!isPdfSignature(header)) {
+    await safeRemove(input.quarantinePath);
+    logger.warn("finalize failed: pdf signature not found in first bytes", {
+      step: "magic-bytes",
+      kind: input.kind,
+      objectExists: true,
+      size: info.size,
+    });
     return { ok: false, error: "invalid_type" };
   }
 
@@ -271,9 +328,26 @@ export async function finalizeStoredUpload(input: {
     .move(input.quarantinePath, finalPath);
   if (moveError) {
     await safeRemove(input.quarantinePath);
+    /* Redact any quarantine-path segment that a storage error message echoes. */
+    const message = (moveError.message ?? "")
+      .replace(/[^\s]*quarantine[^\s]*/gi, "[redacted]")
+      .slice(0, 300);
+    logger.warn("finalize failed: move", {
+      step: "move",
+      kind: input.kind,
+      objectExists: true,
+      size: info.size,
+      message,
+    });
     return { ok: false, error: "move_failed" };
   }
 
+  /* Finalization succeeded — the caller issues the metadata RPC next. */
+  logger.info("finalize ok: object validated and moved; metadata RPC next", {
+    step: "move",
+    kind: input.kind,
+    size: info.size,
+  });
   return { ok: true, finalPath, size: info.size };
 }
 
