@@ -147,26 +147,83 @@ export async function createSignedUploadUrl(path: string): Promise<{
 }
 
 /* Stored-object metadata (size / mimetype) via the Storage info endpoint.
-   Returns null when the object does not exist / info is unavailable. */
+   The @supabase/storage-js 2.112.3 info() response is camel-cased and typed as
+   FileObjectV2, where the size lives under `metadata.size` /
+   `metadata.contentLength` (both numbers). This helper also tolerates the size
+   arriving as a numeric string or on a top-level `size` field, but only ever
+   accepts a finite number — any error (or an object whose size cannot be
+   derived) fails closed (returns null). */
 export async function getStoredObjectInfo(path: string): Promise<{
   size: number;
   mimetype: string | null;
 } | null> {
   const admin = createAdminClient();
-  const { data, error } = await admin.storage.from(RESOURCES_BUCKET).info(path);
-  if (error || !data) return null;
-  const metadata = (data as { metadata?: Record<string, unknown> }).metadata ?? {};
-  const size =
-    typeof metadata.size === "number"
-      ? metadata.size
-      : typeof metadata.contentLength === "number"
-        ? metadata.contentLength
-        : typeof metadata.content_length === "number"
-          ? metadata.content_length
-          : NaN;
-  const mimetype =
-    typeof metadata.mimetype === "string" ? metadata.mimetype : null;
-  if (!Number.isFinite(size)) return null;
+  const res = await admin.storage.from(RESOURCES_BUCKET).info(path);
+  const error = res.error;
+  const data = res.data;
+
+  /* Case 1 — info() itself errored / object not found. Fail closed, but record
+     the sub-reason so production logs can tell "endpoint error" apart from
+     "data but size missing". Never log the path, tokens, or credentials. */
+  if (error || !data) {
+    const status =
+      typeof (error as { status?: unknown } | null)?.status === "number"
+        ? (error as { status: number }).status
+        : undefined;
+    const message = (error?.message ?? "")
+      .replace(/[^\s]*quarantine[^\s]*/gi, "[redacted]")
+      .slice(0, 300);
+    logger.warn("finalize: storage info() failed", {
+      step: "info",
+      infoError: true,
+      objectExists: false,
+      status,
+      message,
+    });
+    return null;
+  }
+
+  /* Case 2 — data returned, but we must derive a finite numeric size from the
+     actual shape (metadata can be null, and size can be a number or a numeric
+     string on this or the top level). If none is usable, fail closed. */
+  const rawMetadata = (data as { metadata?: unknown }).metadata;
+  const md =
+    rawMetadata && typeof rawMetadata === "object"
+      ? (rawMetadata as Record<string, unknown>)
+      : {};
+
+  const candidates: unknown[] = [
+    md.size,
+    md.contentLength,
+    md.content_length,
+    (data as { size?: unknown }).size,
+  ];
+  let size: number | null = null;
+  for (const value of candidates) {
+    if (typeof value === "number" && Number.isFinite(value)) {
+      size = value;
+      break;
+    }
+    if (typeof value === "string" && value.trim() !== "") {
+      const parsed = Number(value);
+      if (Number.isFinite(parsed)) {
+        size = parsed;
+        break;
+      }
+    }
+  }
+  if (size === null) {
+    logger.warn("finalize: storage info() returned no usable size", {
+      step: "info",
+      objectExists: true,
+      sizeMissing: true,
+      metadataPresent: Object.keys(md).length > 0,
+      metadataKeys: Object.keys(md).slice(0, 20),
+    });
+    return null;
+  }
+
+  const mimetype = typeof md.mimetype === "string" ? md.mimetype : null;
   return { size, mimetype };
 }
 
