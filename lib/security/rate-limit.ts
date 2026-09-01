@@ -113,16 +113,6 @@ const LIMITERS = {
     return createLimiter("1 h", 3, "rl:signup:ip");
   },
 
-  /* 3 requests / hour per IP — email bombing */
-  get forgotPasswordIp() {
-    return createLimiter("1 h", 3, "rl:forgot:ip");
-  },
-
-  /* 3 requests / hour per email — email bombing (cross-IP) */
-  get forgotPasswordEmail() {
-    return createLimiter("1 h", 3, "rl:forgot:email");
-  },
-
   /* 20 requests / minute per IP — username enumeration via live search */
   get usernameAvailable() {
     return createLimiter("1 m", 20, "rl:username");

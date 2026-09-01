@@ -534,15 +534,10 @@
       "checkEmailBody": "We sent you a confirmation link. Confirm your email to activate your account."
     },
     "forgot": {
-      "title": "Reset your password",
-      "subtitle": "Enter your username or primary email and we will send you a link to set a new password.",
-      "identifier": "Username or email",
-      "identifierPlaceholder": "username or email",
-      "submit": "Send reset link",
-      "submitLoading": "Sending…",
-      "successTitle": "Check your inbox",
-      "successBody": "If an account exists for that email, a reset link is on its way.",
-      "backToSignIn": "Back to sign in"
+      "title": "Forgot your password?",
+      "subtitle": "Password recovery is handled by the Scientific Committee. Please contact us to have your password changed.",
+      "contact": "Contact the Scientific Committee",
+      "backToSignIn": "Back to login"
     },
     "changePassword": {
       "title": "Change your password",

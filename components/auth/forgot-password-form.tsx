@@ -1,12 +1,17 @@
-"use client";
-
 import Link from "next/link";
-import { useActionState } from "react";
-import { forgotPassword } from "../../lib/auth/actions";
-import { Field, PrimaryButton, TextInput } from "../contribute/primitives";
-import { AuthAlert } from "./auth-shell";
 import type { DictionaryData } from "../../app/[lang]/dictionaries";
+import { LockIcon, ExternalLinkIcon } from "../icons";
 
+/* Official Scientific Committee Instagram account (password recovery is
+   handled in person / via the committee, never by an automatic email flow). */
+const INSTAGRAM_URL = "https://www.instagram.com/scientific.committee/";
+
+/* "Forgot your password?" contact screen.
+
+   Replaces the previous password-reset form. There is no email, no recovery
+   email, and no Supabase reset link: the user is directed to contact the
+   Scientific Committee, exactly as the product decided. The page is fully
+   static — no server action, no client state, nothing is sent. */
 export function ForgotPasswordForm({
   lang,
   dict,
@@ -14,41 +19,23 @@ export function ForgotPasswordForm({
   lang: string;
   dict: DictionaryData["auth"];
 }) {
-  const [state, formAction, pending] = useActionState(forgotPassword, {});
-
-  if (state.success) {
-    return (
-      <div className="space-y-6">
-        <AuthAlert variant="success">{dict.forgot.successBody}</AuthAlert>
-        <Link
-          href={`/${lang}/auth/sign-in`}
-          className="btn-ghost w-full"
-        >
-          {dict.forgot.backToSignIn}
-        </Link>
-      </div>
-    );
-  }
-
   return (
     <div className="space-y-6">
-      {state.error && <AuthAlert variant="error">{state.error}</AuthAlert>}
+      <div className="flex justify-center">
+        <span className="grid h-14 w-14 place-items-center rounded-full border border-accent/30 bg-accent/10 text-accent">
+          <LockIcon className="h-6 w-6" />
+        </span>
+      </div>
 
-      <form action={formAction} noValidate className="space-y-5">
-        <input type="hidden" name="lang" value={lang} />
-        <Field label={dict.forgot.identifier} htmlFor="identifier" required>
-          <TextInput
-            id="identifier"
-            name="identifier"
-            type="text"
-            autoComplete="username"
-            placeholder={dict.forgot.identifierPlaceholder}
-          />
-        </Field>
-        <PrimaryButton type="submit" disabled={pending} className="w-full">
-          {pending ? dict.forgot.submitLoading : dict.forgot.submit}
-        </PrimaryButton>
-      </form>
+      <a
+        href={INSTAGRAM_URL}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="btn-primary inline-flex w-full items-center justify-center gap-2"
+      >
+        {dict.forgot.contact}
+        <ExternalLinkIcon className="h-4 w-4" />
+      </a>
 
       <div className="text-center">
         <Link
