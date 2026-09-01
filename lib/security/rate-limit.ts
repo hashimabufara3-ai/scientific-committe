@@ -138,21 +138,6 @@ const LIMITERS = {
     return createLimiter("1 h", 5, "rl:update-pw");
   },
 
-  /* 3 attempts / hour per user — recovery-email set/change (anti-abuse) */
-  get recoveryEmailSet() {
-    return createLimiter("1 h", 3, "rl:rec-email:set");
-  },
-
-  /* 10 attempts / hour per user — recovery-email verification link resends */
-  get recoveryEmailVerify() {
-    return createLimiter("1 h", 10, "rl:rec-email:verify");
-  },
-
-  /* 3 requests / hour per account — recovery-link dispatch for forgot-password */
-  get recoveryDispatch() {
-    return createLimiter("1 h", 3, "rl:rec-dispatch");
-  },
-
   /* 30 requests / minute per user — admin bulk operations */
   get adminAction() {
     return createLimiter("1 m", 30, "rl:admin");

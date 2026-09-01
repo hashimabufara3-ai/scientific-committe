@@ -6,6 +6,7 @@ import {
   setRoleAction,
   transferOwnershipAction,
   deleteAccountAction,
+  changeMemberPasswordAction,
   type AdminActionResult,
 } from "@/app/[lang]/admin/actions";
 import { canAssign, ROLES, type Role } from "@/lib/auth/roles";
@@ -69,6 +70,17 @@ function canDeleteMember(actor: Role, targetRole: Role): boolean {
   return false;
 }
 
+/* Mirror of the server-side canResetPassword() gating in admin/actions.ts.
+   UI convenience only — the server action re-enforces the exact same rule. */
+function canResetPasswordMember(actor: Role, targetRole: Role): boolean {
+  if (targetRole === "owner") return false;
+  if (actor === "owner") return true;
+  if (actor === "admin") {
+    return targetRole === "student" || targetRole === "contributor";
+  }
+  return false;
+}
+
 /* One member row. The visible transitions are the exact allowlist entries the
    current actor may perform on this member — anything else is not rendered
    and is rejected server-side anyway. */
@@ -95,7 +107,12 @@ function MemberRow({
     deleteAccountAction,
     INITIAL_STATE
   );
+  const [passwordState, passwordFormAction, passwordPending] = useActionState(
+    changeMemberPasswordAction,
+    INITIAL_STATE
+  );
   const [confirming, setConfirming] = useState(false);
+  const [passwordEditing, setPasswordEditing] = useState(false);
 
   const isSelf = member.id === currentUserId;
   const transitions = ROLES.filter((role) =>
@@ -107,7 +124,11 @@ function MemberRow({
   const deleteError = deleteState.errorKey
     ? t.errors[deleteState.errorKey]
     : null;
+  const passwordError = passwordState.errorKey
+    ? t.errors[passwordState.errorKey]
+    : null;
   const canDelete = !isSelf && canDeleteMember(currentRole, member.role);
+  const canResetPw = !isSelf && canResetPasswordMember(currentRole, member.role);
 
   return (
     <Panel className="p-5">
@@ -204,6 +225,94 @@ function MemberRow({
           ) : (
             <SmallButton variant="danger" onClick={() => setConfirming(true)}>
               {t.delete}
+            </SmallButton>
+          )}
+        </div>
+      )}
+
+      {canResetPw && (
+        <div className="mt-4 border-t border-white/5 pt-4">
+          {passwordEditing ? (
+            <div className="space-y-3">
+              <p className="text-sm font-semibold text-foreground">
+                {t.changePassword.title}
+              </p>
+              <form action={passwordFormAction} className="space-y-3">
+                <input type="hidden" name="lang" value={lang} />
+                <input type="hidden" name="targetId" value={member.id} />
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <label
+                      htmlFor={`new-pw-${member.id}`}
+                      className="mb-1.5 block text-xs font-medium text-muted"
+                    >
+                      {t.changePassword.newPassword}
+                    </label>
+                    <TextInput
+                      id={`new-pw-${member.id}`}
+                      name="password"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={6}
+                      required
+                      placeholder={t.changePassword.newPasswordPlaceholder}
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor={`confirm-pw-${member.id}`}
+                      className="mb-1.5 block text-xs font-medium text-muted"
+                    >
+                      {t.changePassword.confirmPassword}
+                    </label>
+                    <TextInput
+                      id={`confirm-pw-${member.id}`}
+                      name="confirmPassword"
+                      type="password"
+                      autoComplete="new-password"
+                      minLength={6}
+                      required
+                      placeholder={t.changePassword.confirmPasswordPlaceholder}
+                    />
+                  </div>
+                </div>
+                {passwordError && (
+                  <p role="alert" className="text-xs text-red-300">
+                    {passwordError}
+                  </p>
+                )}
+                {passwordState.ok && (
+                  <p role="status" className="text-xs text-accent">
+                    {t.changePassword.success}
+                  </p>
+                )}
+                <div className="flex flex-wrap gap-2">
+                  <SmallButton
+                    variant="accent"
+                    type="submit"
+                    disabled={passwordPending}
+                  >
+                    {passwordPending
+                      ? t.changePassword.submitting
+                      : t.changePassword.submit}
+                  </SmallButton>
+                  <SmallButton
+                    variant="ghost"
+                    type="button"
+                    disabled={passwordPending}
+                    onClick={() => setPasswordEditing(false)}
+                  >
+                    {t.cancel}
+                  </SmallButton>
+                </div>
+              </form>
+            </div>
+          ) : (
+            <SmallButton
+              variant="ghost"
+              onClick={() => setPasswordEditing(true)}
+            >
+              {t.changePassword.title}
             </SmallButton>
           )}
         </div>

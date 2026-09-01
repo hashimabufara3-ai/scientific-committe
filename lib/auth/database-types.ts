@@ -13,8 +13,6 @@ export type Database = {
           username: string;
           role: "student" | "contributor" | "admin" | "owner";
           must_change_password: boolean;
-          recovery_email: string | null;
-          recovery_email_confirmed_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -25,8 +23,6 @@ export type Database = {
           username?: string;
           role?: "student" | "contributor" | "admin" | "owner";
           must_change_password?: boolean;
-          recovery_email?: string | null;
-          recovery_email_confirmed_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -37,8 +33,6 @@ export type Database = {
           username?: string;
           role?: "student" | "contributor" | "admin" | "owner";
           must_change_password?: boolean;
-          recovery_email?: string | null;
-          recovery_email_confirmed_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -450,27 +444,6 @@ export type Database = {
         Returns: undefined;
       };
       clear_must_change_password: {
-        Args: Record<PropertyKey, never>;
-        Returns: undefined;
-      };
-      set_recovery_email: {
-        Args: {
-          p_email: string;
-        };
-        Returns: undefined;
-      };
-      get_recovery_email_status: {
-        Args: Record<PropertyKey, never>;
-        Returns: {
-          masked_email: string | null;
-          is_verified: boolean;
-        }[];
-      };
-      confirm_recovery_email: {
-        Args: Record<PropertyKey, never>;
-        Returns: undefined;
-      };
-      clear_recovery_email: {
         Args: Record<PropertyKey, never>;
         Returns: undefined;
       };

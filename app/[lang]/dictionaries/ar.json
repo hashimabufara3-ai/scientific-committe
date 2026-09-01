@@ -403,6 +403,16 @@
       "submit": "نقل الملكية",
       "notice": "ستصبح مديراً وستفقد صلاحيات المالك فوراً."
     },
+    "changePassword": {
+      "title": "تغيير كلمة المرور",
+      "newPassword": "كلمة المرور الجديدة",
+      "newPasswordPlaceholder": "6 أحرف على الأقل",
+      "confirmPassword": "تأكيد كلمة المرور الجديدة",
+      "confirmPasswordPlaceholder": "أعد كتابة كلمة المرور الجديدة",
+      "submit": "تغيير كلمة المرور",
+      "submitting": "جارٍ التغيير…",
+      "success": "تم تحديث كلمة المرور. سيُطلب من هذا العضو تعيين كلمة مرور جديدة عند تسجيل دخوله التالي."
+    },
     "errors": {
       "notAllowed": "هذا الإجراء غير مسموح لدورك.",
       "notFound": "المستخدم غير موجود.",
@@ -416,6 +426,8 @@
       "deleteSelf": "لا يمكنك حذف حسابك الخاص.",
       "deleteOwner": "لا يمكن حذف حساب المالك.",
       "deleteAdmin": "لا يمكن للمدير حذف حساب مدير آخر.",
+      "passwordTooShort": "يجب ألا تقل كلمة المرور عن 6 أحرف.",
+      "passwordsMismatch": "كلمتا المرور غير متطابقتين.",
       "generic": "فشلت العملية. حاول مرة أخرى."
     },
     "committeeMembers": {
@@ -538,13 +550,6 @@
       "newPasswordPlaceholder": "6 أحرف على الأقل",
       "confirmPassword": "تأكيد كلمة المرور الجديدة",
       "confirmPasswordPlaceholder": "أعد كتابة كلمة المرور الجديدة",
-      "recoveryEmail": "بريد استرداد الحساب",
-      "recoveryEmailOptional": "اختياري",
-      "recoveryEmailPlaceholder": "you@gmail.com",
-      "recoveryEmailHint": "أدخل بريدًا إلكترونيًا حقيقيًا يمكنك الوصول إليه (مثل Gmail أو Outlook) حتى تتمكن من استعادة حسابك إذا نسيت كلمة المرور.",
-      "recoveryAdded": "تم تحديث كلمة المرور وإضافة بريد الاسترداد. تحقق من هذا البريد وانقر رابط التحقق لتفعيله — يمكنك أيضًا إتمام التحقق في أي وقت من صفحة حسابي.",
-      "recoveryAddFailed": "تم تحديث كلمة المرور، لكن تعذّرت إضافة بريد الاسترداد. يمكنك إضافته في أي وقت من صفحة حسابي.",
-      "continue": "متابعة",
       "submit": "تحديث كلمة المرور",
       "submitLoading": "جارٍ التحديث…"
     },
@@ -577,19 +582,6 @@
         "owner": "المالك"
       },
       "noProfile": "تعذّر العثور على ملف لهذا الحساب بعد.",
-      "recoveryEmail": "البريد الإلكتروني للاسترداد",
-      "recoveryNotConfigured": "لم يتم تعيين بريد استرداد. يُستخدم لاسترداد حسابك إذا فقدت الوصول إلى بريدك الأساسي.",
-      "addRecoveryEmail": "إضافة بريد الاسترداد",
-      "changeRecoveryEmail": "تغيير",
-      "clearRecoveryEmail": "إزالة",
-      "verifyRecoveryEmail": "تحقق",
-      "recoveryVerified": "تم التحقق",
-      "recoveryPending": "بانتظار التحقق",
-      "recoveryEmailSent": "تحقق من صندوق الوارد. تم إرسال رابط التحقق إلى بريد الاسترداد.",
-      "recoveryEmailNewLabel": "البريد الخارجي للاسترداد",
-      "recoveryEmailHint": "استخدم عنواناً خارجياً (مثل Gmail أو Outlook). لن يُغيّر هذا بريد حسابك الأساسي.",
-      "sendVerification": "إرسال رابط التحقق",
-      "cancelRecoveryEmail": "إلغاء",
       "signOut": "تسجيل الخروج"
     },
     "errors": {
@@ -607,9 +599,6 @@
       "rateLimited": "محاولات كثيرة — انتظر لحظة ثم حاول مجدداً.",
       "network": "خطأ في الشبكة — تحقق من اتصالك ثم أعد المحاولة.",
       "invalidToken": "هذا الرابط غير صالح أو انتهت صلاحيته. حاول مجدداً.",
-      "recoveryEmailPtuksc": "يجب أن يكون بريد الاسترداد عنواناً خارجياً (وليس @ptuksc.com).",
-      "recoveryEmailPrimary": "لا يمكن أن يكون بريد الاسترداد مطابقاً لبريد الحساب الأساسي.",
-      "recoveryEmailTaken": "بريد الاسترداد هذا مرتبط بحساب آخر بالفعل.",
       "signupsDisabled": "التسجيل معطّل حالياً. حاول لاحقاً.",
       "generic": "حدث خطأ ما. يرجى المحاولة مرة أخرى."
     }

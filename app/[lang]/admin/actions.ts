@@ -33,12 +33,17 @@ export type AdminErrorKey =
   | "deleteSelf"
   | "deleteOwner"
   | "deleteAdmin"
+  | "passwordTooShort"
+  | "passwordsMismatch"
   | "generic";
 
 export type AdminActionResult = {
   ok: boolean;
   errorKey?: AdminErrorKey;
 };
+
+/* Same minimum password length as the rest of the authentication system. */
+const MIN_PASSWORD_LENGTH = 6;
 
 function readLang(formData: FormData): string {
   const lang = formData.get("lang");
@@ -349,6 +354,136 @@ export async function deleteAccountAction(
 
   revalidatePath(`/${lang}/admin`);
   if (linkedCommitteeMember) revalidatePath(`/${lang}/about`);
+  return { ok: true };
+}
+
+/* ---------------------------------------------------------------------------
+   Change a member's password
+   --------------------------------------------------------------------------- */
+
+/* Which member roles the current actor may reset the password of. Mirrors the
+   admin/owner gating used for role changes and deletion (UX + server-side
+   enforcement; set_must_change_password() re-checks it in the database):
+     - nobody may act on the Owner;
+     - Owner may reset anyone except themselves;
+     - Admin may reset student/contributor only. */
+function canResetPassword(actor: Role, targetRole: Role): boolean {
+  if (targetRole === "owner") return false;
+  if (actor === "owner") return true;
+  if (actor === "admin") {
+    return targetRole === "student" || targetRole === "contributor";
+  }
+  return false;
+}
+
+/* Set a NEW password for an existing member (used by the admin dashboard).
+   The new password is set through the Supabase Auth Admin API with the
+   service-role client (an admin-role-worthy operation) and the member is then
+   flagged with must_change_password = true so they choose their own password
+   on the next sign-in — consistent with how temporary passwords behave.
+
+   Security:
+     - Authorization is re-read from the database (requireAdminActor), the
+       actor must be admin/owner, and the target must be a member the actor may
+       manage (canResetPassword above); set_must_change_password() re-checks
+       require_admin_role() in the database.
+     - The password never leaves this server action as a value in any URL,
+       log, or error message; it is only passed to auth.admin.updateUserById.
+     - NEVER stored in plain text; never returned to the client. */
+export async function changeMemberPasswordAction(
+  _prev: AdminActionResult,
+  formData: FormData
+): Promise<AdminActionResult> {
+  const lang = readLang(formData);
+  const targetId = String(formData.get("targetId") ?? "");
+
+  const session = await requireAdminActor(lang);
+  if (session.role !== "admin" && session.role !== "owner") {
+    return { ok: false, errorKey: "notAllowed" };
+  }
+
+  /* Rate limit: 30 requests / minute per authenticated admin */
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.adminAction,
+    session.user.id
+  );
+  if (!allowed) return { ok: false, errorKey: "notAllowed" };
+
+  const password = String(formData.get("password") ?? "");
+  const confirmPassword = String(formData.get("confirmPassword") ?? "");
+  if (password.length < MIN_PASSWORD_LENGTH)
+    return { ok: false, errorKey: "passwordTooShort" };
+  if (password !== confirmPassword)
+    return { ok: false, errorKey: "passwordsMismatch" };
+
+  const supabase = await createClient();
+
+  /* Resolve the target from the server-authorized listing (never from the
+     client) so we always act on a real member with an authoritative role. */
+  const { data: members, error: membersError } = await supabase.rpc(
+    "admin_list_members"
+  );
+  if (membersError) {
+    captureActionError(membersError, "admin_list_members RPC failed", {
+      action: "changeMemberPasswordAction",
+      route: `/${lang}/admin`,
+      code: membersError.code,
+    });
+  }
+  const target = (members ?? []).find((member) => member.id === targetId);
+  if (!target || !isRole(target.role)) {
+    return { ok: false, errorKey: "notFound" };
+  }
+  if (!canResetPassword(session.role, target.role)) {
+    return { ok: false, errorKey: "notAllowed" };
+  }
+
+  /* Update the password via the Supabase Auth Admin API (service-role,
+     server-side only). The password is passed directly as the admin API body
+     and is never placed in logs, URLs, or error messages. */
+  const adminSupabase = createAdminClient();
+  const { error: updateError } = await adminSupabase.auth.admin.updateUserById(
+    targetId,
+    { password }
+  );
+  if (updateError) {
+    captureActionError(updateError, "admin.updateUserById failed", {
+      action: "changeMemberPasswordAction",
+      route: `/${lang}/admin`,
+      code: updateError.code,
+    });
+    return { ok: false, errorKey: "generic" };
+  }
+
+  /* Consistency with the existing authentication model: force the member to
+     choose their own password at the next login, exactly like the temporary
+     password issued at account creation. The RPC re-checks the actor's role
+     in the database. Non-fatal if it fails — the new password is already set
+     and the member can sign in with it normally. */
+  const { error: mcpError } = await supabase.rpc("set_must_change_password", {
+    p_user_id: targetId,
+    p_must_change: true,
+  });
+  if (mcpError) {
+    captureActionError(mcpError, "set_must_change_password failed", {
+      action: "changeMemberPasswordAction",
+      route: `/${lang}/admin`,
+      code: mcpError.code,
+    });
+  }
+
+  /* Audit log. The password itself is never logged. */
+  await supabase.rpc("log_audit_event", {
+    p_action: "account_password_reset",
+    p_target_type: "profile",
+    p_target_id: targetId,
+    p_details: {
+      username: target.username ?? null,
+      role: target.role,
+    } as Record<string, unknown>,
+  });
+
+  revalidatePath(`/${lang}/admin`);
   return { ok: true };
 }
 

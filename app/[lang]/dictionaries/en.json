@@ -404,6 +404,16 @@
       "submit": "Transfer ownership",
       "notice": "You will become an Admin and immediately lose Owner-only capabilities."
     },
+    "changePassword": {
+      "title": "Change Password",
+      "newPassword": "New Password",
+      "newPasswordPlaceholder": "At least 6 characters",
+      "confirmPassword": "Confirm New Password",
+      "confirmPasswordPlaceholder": "Repeat the new password",
+      "submit": "Change Password",
+      "submitting": "Changing…",
+      "success": "Password updated. This member will be asked to set a new password on their next sign-in."
+    },
     "errors": {
       "notAllowed": "This action is not allowed for your role.",
       "notFound": "User not found.",
@@ -417,6 +427,8 @@
       "deleteSelf": "You cannot delete your own account.",
       "deleteOwner": "The Owner account cannot be deleted.",
       "deleteAdmin": "An Admin cannot delete another Admin account.",
+      "passwordTooShort": "Password must be at least 6 characters.",
+      "passwordsMismatch": "Passwords do not match.",
       "generic": "The operation failed. Please try again."
     },
     "committeeMembers": {
@@ -540,13 +552,6 @@
       "newPasswordPlaceholder": "At least 6 characters",
       "confirmPassword": "Confirm new password",
       "confirmPasswordPlaceholder": "Repeat your new password",
-      "recoveryEmail": "Account recovery email",
-      "recoveryEmailOptional": "Optional",
-      "recoveryEmailPlaceholder": "you@gmail.com",
-      "recoveryEmailHint": "Enter a real email address that you can access (such as Gmail or Outlook). We'll use it to help you recover your account if you forget your password.",
-      "recoveryAdded": "Your password was updated and your recovery email was added. Check that inbox and click the verification link to finish activating it — you can also complete it any time from My Account.",
-      "recoveryAddFailed": "Your password was updated, but your recovery email could not be added. You can add it any time from My Account.",
-      "continue": "Continue",
       "submit": "Update password",
       "submitLoading": "Updating…"
     },
@@ -579,19 +584,6 @@
         "owner": "Owner"
       },
       "noProfile": "We could not find a profile for this account yet.",
-      "recoveryEmail": "Recovery email",
-      "recoveryNotConfigured": "No recovery email set. Used to recover your account if you lose access to your primary email.",
-      "addRecoveryEmail": "Add recovery email",
-      "changeRecoveryEmail": "Change",
-      "clearRecoveryEmail": "Remove",
-      "verifyRecoveryEmail": "Verify",
-      "recoveryVerified": "Verified",
-      "recoveryPending": "Verification pending",
-      "recoveryEmailSent": "Check your inbox. A verification link has been sent to your recovery email.",
-      "recoveryEmailNewLabel": "External recovery email",
-      "recoveryEmailHint": "Use an external address (e.g. Gmail or Outlook). This will not change your primary account email.",
-      "sendVerification": "Send verification link",
-      "cancelRecoveryEmail": "Cancel",
       "signOut": "Sign out"
     },
     "errors": {
@@ -609,9 +601,6 @@
       "rateLimited": "Too many attempts — please wait a moment and try again.",
       "network": "Network error — please check your connection and try again.",
       "invalidToken": "This link is invalid or has expired. Please try again.",
-      "recoveryEmailPtuksc": "Recovery email must be an external address (not @ptuksc.com).",
-      "recoveryEmailPrimary": "Recovery email cannot be the same as your primary account email.",
-      "recoveryEmailTaken": "That recovery email is already linked to another account.",
       "signupsDisabled": "Sign-ups are currently disabled. Please try again later.",
       "generic": "Something went wrong. Please try again."
     }
