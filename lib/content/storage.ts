@@ -227,25 +227,30 @@ export async function getStoredObjectInfo(path: string): Promise<{
   return { size, mimetype };
 }
 
-/* Read at most `maxBytes` of a stored object via an authenticated range GET.
-   Uses a bounded stream reader so even if the server ignores the Range header
-   we never pull the whole body into memory. Returns the bytes or null. */
+/* Read at most `maxBytes` of a stored object via an authenticated GET.
+   The request is shaped EXACTLY like @supabase/storage-js 2.112.3 download():
+     `${storageUrl}/object/{bucket}/{path}` with Authorization + apikey headers
+   and NO Range header. This Storage stack rejects an authenticated Range GET on
+   /object/... with HTTP 400 (storage-js's own exists() even treats 400/404 as
+   "not found" on this endpoint), so we do NOT send Range. To still avoid
+   pulling the whole object (~≤3 MB) into memory, the bounded stream reader
+   copies only the first `maxBytes` bytes and immediately cancels the stream.
+   Returns the bytes or null. */
 export async function readStoredObjectPrefix(
   path: string,
   maxBytes: number
 ): Promise<Uint8Array | null> {
+  const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
   const base = `${requireEnv("NEXT_PUBLIC_SUPABASE_URL")}/storage/v1`;
-  const encoded = path
-    .split("/")
-    .map((segment) => encodeURIComponent(segment))
-    .join("/");
+  /* Same relative-path form storage-js uses (_getFinalPath): bucket + path,
+     no per-segment encoding (the quarantine path is server-generated ASCII). */
+  const objectKey = `${RESOURCES_BUCKET}/${path}`;
   let res: Response;
   try {
-    res = await fetch(`${base}/object/${RESOURCES_BUCKET}/${encoded}`, {
+    res = await fetch(`${base}/object/${objectKey}`, {
       headers: {
-        Authorization: `Bearer ${requireEnv("SUPABASE_SERVICE_ROLE_KEY")}`,
-        apikey: requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
-        Range: `bytes=0-${maxBytes - 1}`,
+        Authorization: `Bearer ${serviceRoleKey}`,
+        apikey: serviceRoleKey,
       },
       cache: "no-store",
     });
