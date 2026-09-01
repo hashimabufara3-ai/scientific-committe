@@ -4,6 +4,7 @@ import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { getDictionary } from "../dictionaries";
+import { revalidateHeroStats } from "../../../lib/cache/public";
 import { getSessionRole } from "../../../lib/auth/authorize";
 import { canAssign, isRole, type Role } from "../../../lib/auth/roles";
 import {
@@ -348,7 +349,12 @@ export async function deleteAccountAction(
   });
 
   revalidatePath(`/${lang}/admin`);
-  if (linkedCommitteeMember) revalidatePath(`/${lang}/about`);
+  if (linkedCommitteeMember) {
+    revalidatePath(`/${lang}/about`);
+    /* A linked active committee member was just deleted, so the Hero count
+       changed — invalidate it only in this branch. */
+    revalidateHeroStats();
+  }
   return { ok: true };
 }
 
@@ -427,6 +433,7 @@ export async function createCommitteeMemberAction(
 
   revalidatePath(`/${lang}/admin`);
   revalidatePath(`/${lang}/about`);
+  revalidateHeroStats();
   return { ok: true };
 }
 
@@ -726,6 +733,7 @@ const supabase = await createClient();
 
     revalidatePath(`/${lang}/admin`);
     revalidatePath(`/${lang}/about`);
+    revalidateHeroStats();
 
     return {
       ok: true,
@@ -798,6 +806,9 @@ export async function updateCommitteeMemberAction(
 
   revalidatePath(`/${lang}/admin`);
   revalidatePath(`/${lang}/about`);
+  /* The update can toggle is_active (or reassign a user_id), both of which
+     affect whether a row is counted, so invalidate the Hero count on success. */
+  revalidateHeroStats();
   return { ok: true };
 }
 
@@ -831,5 +842,6 @@ export async function deleteCommitteeMemberAction(
 
   revalidatePath(`/${lang}/admin`);
   revalidatePath(`/${lang}/about`);
+  revalidateHeroStats();
   return { ok: true };
 }

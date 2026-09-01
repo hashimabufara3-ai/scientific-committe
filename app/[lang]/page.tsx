@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDictionary, hasLocale } from "./dictionaries";
-import { createClient } from "../../lib/auth/supabase-server";
+import { getActiveCommitteeMemberCount } from "../../lib/content/hero-stats";
 import HeroCinematic from "../../components/hero-cinematic";
 import Reveal from "../../components/reveal";
 import SectionHeading from "../../components/section-heading";
@@ -35,23 +35,17 @@ export async function generateMetadata({
    on the public committee_members table. RLS allows anon read access.
    `head: true` tells Supabase to return only the count — no rows are
    transferred, making this significantly faster than the RPC that fetched
-   every member row just to count them. */
-async function getHeroStats(
-  supabase: Awaited<ReturnType<typeof createClient>>,
-  committeeLabel: string,
-) {
+   every member row just to count them.
+
+   The count itself comes from getActiveCommitteeMemberCount(), which is a
+   cached function (unstable_cache, cookie-free anon read) so it can be
+   cached safely. Only that aggregate is cached — never member rows. */
+async function getHeroStats(committeeLabel: string) {
   const stats: { value: string; label: string }[] = [];
 
-  try {
-    const { count, error } = await supabase
-      .from("committee_members")
-      .select("id", { count: "exact", head: true })
-      .eq("is_active", true);
-    if (!error && count !== null && count > 0) {
-      stats.push({ value: `+${count}`, label: committeeLabel });
-    }
-  } catch {
-    /* omit committee statistic */
+  const count = await getActiveCommitteeMemberCount();
+  if (count > 0) {
+    stats.push({ value: `+${count}`, label: committeeLabel });
   }
 
   return stats;
@@ -61,11 +55,8 @@ export default async function Home({ params }: PageProps<"/[lang]">) {
   const { lang } = await params;
   if (!hasLocale(lang)) notFound();
 
-  const [dict, supabase] = await Promise.all([
-    getDictionary(lang),
-    createClient(),
-  ]);
-  const stats = await getHeroStats(supabase, dict.stats.committeeMembers);
+  const dict = await getDictionary(lang);
+  const stats = await getHeroStats(dict.stats.committeeMembers);
 
   return (
     <main id="main-content">
