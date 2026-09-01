@@ -50,10 +50,10 @@ function FormShell({ t, canSubmit, submitLabel, onCancel, children, hint, busy }
 
 /* ---- Shared single-file upload -------------------------------------------
    One "choose a file" flow for every contribution type (summary uploads and
-   previous-exam files): a 2 MB cap. The raw browser File is kept (never read
-   as a data URL). The dashboard uploads that native File to Storage via the
-   /api/resources/upload route handler, so only the Storage path + display
-   metadata ever reach the database. */
+   previous-exam files): PDF only, 3 MB cap. The raw browser File is kept
+   (never read as a data URL). The dashboard uploads that native File DIRECTLY
+   to Storage via a short-lived signed upload URL, so only the Storage path +
+   display metadata ever reach Render or the database. */
 
 export type FileState = {
   fileName: string;

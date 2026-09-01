@@ -44,10 +44,11 @@ import { SparkIcon } from "../icons";
    /[lang]/contribute/page.tsx via getSubjects() (metadata only) and refreshed
    through router.refresh() after every mutation. Mutations go through the
    Server Actions in app/[lang]/contribute/actions.ts — the single place rows
-   are written to the database — and PDF/exam bytes go to Storage via the
-   /api/resources/upload route handler (multipart). The browser never reads a
-   file as a data URL, never stores bytes in localStorage, and never sends
-   bytes through a Server Action argument.
+   are written to the database. PDF bytes go DIRECTLY from the browser to the
+   private Storage bucket via a short-lived signed upload URL
+   (/api/resources/upload-auth); only upload metadata passes through Render.
+   The browser never reads a file as a data URL, never stores bytes in
+   localStorage, and never sends bytes through a Server Action argument.
 
    Ownership gating (edit/delete) uses `currentUserId` (the authenticated
    contributor resolved server-side), not a prototype constant.
@@ -69,34 +70,9 @@ type UploadOutcome =
   | { ok: true; value: UploadResult }
   | { ok: false; reason: UploadFailure };
 
-/* Upload a raw browser File to Storage via the Route Handler. Only the Storage
-   path + display metadata come back; bytes never leave the request body except
-   as the multipart stream being written to the bucket. The server (MIME + size
-   + PDF magic bytes) is authoritative — a failed 422 maps to type/size. */
-async function uploadFile(
-  file: File,
-  kind: "summary" | "exam"
-): Promise<UploadOutcome> {
-  try {
-    const fd = new FormData();
-    fd.set("file", file);
-    fd.set("kind", kind);
-    const res = await fetch("/api/resources/upload", { method: "POST", body: fd });
-    if (res.status === 422) {
-      const body = (await res.json().catch(() => ({}))) as {
-        error?: string;
-      };
-      return {
-        ok: false,
-        reason: body.error === "too_large" ? "size" : "type",
-      };
-    }
-    if (!res.ok) return { ok: false, reason: "network" };
-    return { ok: true, value: (await res.json()) as UploadResult };
-  } catch {
-    return { ok: false, reason: "network" };
-  }
-}
+/* Mirrors RESOURCES_BUCKET in lib/content/storage.ts (server). The bucket is
+   PRIVATE; the browser only ever gets a short-lived signed upload URL. */
+const RESOURCES_BUCKET = "resources";
 
 export default function ContributorDashboard({
   lang,
@@ -121,6 +97,12 @@ export default function ContributorDashboard({
   const [now, setNow] = useState(0);
   /* True while an upload / Server Action is running — disables submits. */
   const [busy, setBusy] = useState(false);
+  /* Current upload sub-step, surfaced to the contributor:
+     preparing (requesting authorization) → uploading (direct to Storage) →
+     finalizing (server validating + finalizing the stored object). */
+  const [uploadPhase, setUploadPhase] = useState<
+    "preparing" | "uploading" | "finalizing" | null
+  >(null);
   const busyRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /* IDs of subjects whose delete Server Action already succeeded, but whose
@@ -202,7 +184,74 @@ export default function ContributorDashboard({
   const end = useCallback(() => {
     busyRef.current = false;
     setBusy(false);
+    setUploadPhase(null);
   }, []);
+
+  /* Upload a raw browser File DIRECTLY to the private Storage bucket via a
+     short-lived signed upload URL issued by /api/resources/upload-auth. Only
+     upload METADATA travels to Render (a few hundred bytes); the 3 MB file body
+     goes straight from the browser to Supabase Storage. The server validates
+     the actual stored object (size + PDF magic bytes) before any metadata is
+     written (finalizeStoredUpload inside the resource Server Actions). The
+     server's 422 codes map to the same type/size reasons as before. */
+  const uploadFile = useCallback(
+    async (file: File, kind: "summary" | "exam"): Promise<UploadOutcome> => {
+      setUploadPhase("preparing");
+      try {
+        /* Best-effort MIME for the metadata request; the PDF gate is still
+           enforced server-side on the stored object, not by this string. */
+        const mimeType =
+          file.type || (/\.pdf$/i.test(file.name) ? "application/pdf" : "");
+        const res = await fetch("/api/resources/upload-auth", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            kind,
+            fileName: file.name,
+            mimeType,
+            size: file.size,
+          }),
+        });
+        if (res.status === 422) {
+          const body = (await res.json().catch(() => ({}))) as {
+            error?: string;
+          };
+          return {
+            ok: false,
+            reason: body.error === "too_large" ? "size" : "type",
+          };
+        }
+        if (!res.ok) return { ok: false, reason: "network" };
+        const { path, token } = (await res.json()) as {
+          path: string;
+          token: string;
+        };
+
+        setUploadPhase("uploading");
+        const { createClient } = await import(
+          "../../lib/auth/supabase-browser"
+        );
+        const supabase = createClient();
+        const { error } = await supabase.storage
+          .from(RESOURCES_BUCKET)
+          .uploadToSignedUrl(path, token, file);
+        if (error) return { ok: false, reason: "network" };
+
+        return {
+          ok: true,
+          value: {
+            path,
+            fileName: file.name,
+            mimeType: mimeType || "application/pdf",
+            fileSize: file.size,
+          },
+        };
+      } catch {
+        return { ok: false, reason: "network" };
+      }
+    },
+    []
+  );
 
   const ownerOf = useCallback(
     (target: DeleteTarget): string | undefined => {
@@ -238,6 +287,7 @@ export default function ContributorDashboard({
               showToast(uploadErrorText(upload.reason));
               return;
             }
+            setUploadPhase("finalizing");
             const created = await createSummaryAction(lang, {
               subjectId: subjectRef.subjectId,
               title: values.title,
@@ -314,6 +364,7 @@ export default function ContributorDashboard({
             if (!res.ok) showToast(uploadErrorText(res.reason));
             else examUpload = res.value;
           }
+          setUploadPhase("finalizing");
 
           const created = await createNewMaterialAction(lang, {
             title: subjectRef.title,
@@ -389,6 +440,7 @@ export default function ContributorDashboard({
           showToast(uploadErrorText(upload.reason));
           return;
         }
+        setUploadPhase("finalizing");
         const created: ExamActionResult = await createExamAction(lang, {
           subjectId,
           type: values.type,
@@ -462,6 +514,7 @@ setEditing(null);
             showToast(uploadErrorText(upload.reason));
             return;
           }
+          setUploadPhase("finalizing");
           r = await updateSummaryAction(lang, {
             ...base,
             source: "upload",
@@ -507,6 +560,7 @@ setEditing(null);
             showToast(uploadErrorText(upload.reason));
             return;
           }
+          setUploadPhase("finalizing");
           r = await updateExamAction(lang, {
             ...base,
             storagePath: upload.value.path,
@@ -662,6 +716,22 @@ setEditing(null);
   return (
     <>
       <ContributeView api={api} />
+      {uploadPhase && (
+        <div
+          role="status"
+          className="fixed inset-x-0 bottom-[4.5rem] z-[95] mx-auto flex w-max max-w-[90vw] items-center gap-2 rounded-full border border-accent/40 bg-elevated px-5 py-2.5 text-sm font-medium text-foreground shadow-[0_16px_48px_rgba(0,0,0,0.55)]"
+        >
+          <span
+            aria-hidden="true"
+            className="h-2 w-2 animate-pulse rounded-full bg-accent/70"
+          />
+          {uploadPhase === "preparing"
+            ? t.forms.uploadPreparing
+            : uploadPhase === "uploading"
+              ? t.forms.uploading
+              : t.forms.uploadFinalizing}
+        </div>
+      )}
       {toast && (
         <div
           role="status"

@@ -3,8 +3,9 @@ import { RESOURCES_BUCKET } from "./storage";
 
 /* Orphaned Storage-object cleanup for the Resources/Summaries section.
 
-   The two-step upload flow (POST /api/resources/upload writes object bytes to
-   Storage; the subsequent server action creates the metadata row) can leave a
+   The direct-to-Storage upload flow (the browser PUTs bytes straight to the
+   private bucket via a short-lived signed upload URL, then a server action
+   validates and moves the object and creates the metadata row) can leave a
    Storage object with no referencing DB row when the flow is interrupted:
 
      - the user uploads successfully but closes/navigates away before the
@@ -30,8 +31,13 @@ export const ORPHAN_GRACE_MS = 6 * 60 * 60 * 1000; // 6 hours
 
 type ListedObject = { name: string; created_at?: string };
 
-/* List every object under a prefix (pagination loop, 1000 per page). */
-async function listPrefix(prefix: string): Promise<ListedObject[]> {
+/* List every object under a prefix (pagination loop, 1000 per page), recursing
+   into subfolders. Storage list entries that carry an `id` are files; entries
+   without one are folders (e.g. the quarantine/<userId>/ uploads). */
+async function listPrefix(
+  prefix: string,
+  depth = 0
+): Promise<ListedObject[]> {
   const admin = createAdminClient();
   const all: ListedObject[] = [];
   let offset = 0;
@@ -44,11 +50,13 @@ async function listPrefix(prefix: string): Promise<ListedObject[]> {
     if (error) throw new Error(`list ${prefix}: ${error.message}`);
     if (!data || data.length === 0) break;
     for (const item of data) {
-      if (item.name) {
-        all.push({
-          name: `${prefix}/${item.name}`,
-          created_at: item.created_at ?? undefined,
-        });
+      const child = `${prefix}/${item.name}`;
+      /* Folders have no `id`; descend (bounded) into them. */
+      if (item.id) {
+        all.push({ name: child, created_at: item.created_at ?? undefined });
+      } else if (depth < 3) {
+        const nested = await listPrefix(child, depth + 1);
+        all.push(...nested);
       }
     }
     if (data.length < limit) break;
@@ -96,7 +104,7 @@ export async function sweepOrphanedObjects(): Promise<{
   let scanned = 0;
   let deleted = 0;
 
-  for (const prefix of ["summaries", "exams"]) {
+  for (const prefix of ["summaries", "exams", "quarantine"]) {
     const objects = await listPrefix(prefix);
     const toDelete: string[] = [];
 

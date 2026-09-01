@@ -5,23 +5,26 @@ import { redirect } from "next/navigation";
 import { buildSessionWithRole, getSessionUser } from "../../../lib/auth/authorize";
 import { createAdminClient, createClient } from "../../../lib/auth/supabase-server";
 import { checkRateLimit, LIMITERS } from "../../../lib/security/rate-limit";
-import { removeResource } from "../../../lib/content/storage";
+import { removeResource, finalizeStoredUpload } from "../../../lib/content/storage";
 import { subjectIsDuplicate } from "../../../lib/content/mock-contributor-data";
 import type { ExamType, Semester } from "../../../lib/content/mock-contributor-data";
 
 /* Server actions for the Resources/Summaries contributor workflow.
 
    These actions are the ONLY place metadata rows are created/updated/deleted.
-   They receive METADATA plus a storage path (for uploads the path was produced
-   by the /api/resources/upload route from raw bytes). They NEVER receive file
-   bytes.
+   They receive METADATA plus the QUARANTINE storage path the browser uploaded
+   directly to via a signed upload URL (see /api/resources/upload-auth). Each
+   action finalizes the object server-side (validates the actual stored bytes —
+   size + PDF magic bytes — then moves it to its canonical summaries/exams
+   path) before any metadata row can reference it. The actions NEVER receive
+   file bytes.
 
    Authorization is enforced twice:
      - Here, re-reading the actor's role from the database (getSessionRole).
      - Authoritatively in the SECURITY DEFINER functions (require_contributor()
        and the owner/admin checks), which cannot be bypassed via the client.
 
-   Compensation: if an upload's metadata write fails, the just-uploaded Storage
+   Compensation: if an upload's metadata write fails, the finalized Storage
    object is removed so nothing is left orphaned. On soft delete of a subject,
    the storage objects under that subject are removed after the soft delete.
 
@@ -277,19 +280,18 @@ export async function createNewMaterialAction(
     return { ok: false, errorKey: "uploadMissing" };
   }
 
-  /* Best-effort compensation of already-uploaded objects when the transaction
-     did not happen (duplicate verdict / RPC failure). */
-  const compensateUploads = async () => {
-    if (input.summary.source === "upload" && input.summary.storagePath) {
+  /* Best-effort compensation of quarantine objects uploaded by the client
+     when the transaction fails BEFORE any finalize happens. After a finalize
+     succeeds the object lives at its final path, which the RPC-failure
+     compensation below removes instead. */
+  const compensateQuarantine = async () => {
+    const paths = [
+      input.summary.source === "upload" ? input.summary.storagePath : null,
+      input.exam?.storagePath ?? null,
+    ].filter((p): p is string => Boolean(p));
+    for (const path of paths) {
       try {
-        await removeResource(input.summary.storagePath);
-      } catch {
-        /* cleanup best-effort */
-      }
-    }
-    if (input.exam?.storagePath) {
-      try {
-        await removeResource(input.exam.storagePath);
+        await removeResource(path);
       } catch {
         /* cleanup best-effort */
       }
@@ -299,12 +301,50 @@ export async function createNewMaterialAction(
   const supabase = await createClient();
   const duplicateCheck = await findActiveDuplicateSubject(title);
   if (duplicateCheck === "duplicate") {
-    await compensateUploads();
+    await compensateQuarantine();
     return { ok: false, errorKey: "duplicate" };
   }
   if (duplicateCheck === "error") {
-    await compensateUploads();
+    await compensateQuarantine();
     return { ok: false, errorKey: "generic" };
+  }
+
+  /* Finalize (validate + move) any directly-uploaded objects. Each helper
+     removes its quarantine object on failure; on the summary's failure we also
+     remove any pending exam quarantine. The authoritative server-side size is
+     taken from the stored object. */
+  let summaryFinal: { finalPath: string; size: number } | null = null;
+  if (input.summary.source === "upload" && input.summary.storagePath) {
+    const finalized = await finalizeStoredUpload({
+      quarantinePath: input.summary.storagePath,
+      userId: session.user.id,
+      kind: "summary",
+    });
+    if (!finalized.ok) {
+      await compensateQuarantine();
+      return { ok: false, errorKey: "validation" };
+    }
+    summaryFinal = { finalPath: finalized.finalPath, size: finalized.size };
+  }
+
+  let examFinal: { finalPath: string; size: number } | null = null;
+  if (input.exam?.storagePath) {
+    const finalized = await finalizeStoredUpload({
+      quarantinePath: input.exam.storagePath,
+      userId: session.user.id,
+      kind: "exam",
+    });
+    if (!finalized.ok) {
+      if (summaryFinal) {
+        try {
+          await removeResource(summaryFinal.finalPath);
+        } catch {
+          /* cleanup best-effort */
+        }
+      }
+      return { ok: false, errorKey: "validation" };
+    }
+    examFinal = { finalPath: finalized.finalPath, size: finalized.size };
   }
 
   const { data: id, error } = await supabase.rpc("create_subject_with_summary", {
@@ -317,24 +357,34 @@ export async function createNewMaterialAction(
     p_summary_videos:
       input.summary.videos?.filter((v) => v.trim().length > 0) ?? [],
     p_summary_storage_path:
-      input.summary.source === "upload" ? input.summary.storagePath : null,
+      input.summary.source === "upload" ? summaryFinal?.finalPath ?? null : null,
     p_summary_file_name:
       input.summary.source === "upload" ? input.summary.fileName : null,
     p_summary_mime_type:
-      input.summary.source === "upload" ? input.summary.mimeType : null,
+      input.summary.source === "upload" ? "application/pdf" : null,
     p_summary_file_size:
-      input.summary.source === "upload" ? input.summary.fileSize : null,
+      input.summary.source === "upload" ? summaryFinal?.size ?? null : null,
     p_exam_type: input.exam?.type ?? null,
     p_exam_year: input.exam?.year || null,
     p_exam_semester: input.exam?.semester || null,
-    p_exam_storage_path: input.exam?.storagePath ?? null,
+    p_exam_storage_path: examFinal?.finalPath ?? null,
     p_exam_file_name: input.exam?.fileName ?? null,
-    p_exam_mime_type: input.exam?.mimeType ?? null,
-    p_exam_file_size: input.exam?.fileSize ?? null,
+    p_exam_mime_type: input.exam ? "application/pdf" : null,
+    p_exam_file_size: examFinal?.size ?? null,
   });
 
   if (error) {
-    await compensateUploads();
+    /* Compensation for finalized objects already moved out of quarantine. */
+    const moved = [summaryFinal?.finalPath, examFinal?.finalPath].filter(
+      (p): p is string => Boolean(p)
+    );
+    for (const path of moved) {
+      try {
+        await removeResource(path);
+      } catch {
+        /* cleanup best-effort */
+      }
+    }
     return { ok: false, errorKey: mapRpcError(error.message) };
   }
 
@@ -440,23 +490,42 @@ export async function createSummaryAction(
   }
 
   const supabase = await createClient();
+
+  /* The browser uploaded DIRECTLY to Storage into its own quarantine path.
+     Finalize = validate the actual stored bytes (size + PDF magic bytes) with
+     the service-role client, then move the object to its canonical path. Only
+     the final path is ever written to metadata; the quarantine object is
+     removed here on any validation failure. */
+  let storedPath: string | null = null;
+  let storedSize: number | null = null;
+  if (input.source === "upload" && input.storagePath) {
+    const finalized = await finalizeStoredUpload({
+      quarantinePath: input.storagePath,
+      userId: session.user.id,
+      kind: "summary",
+    });
+    if (!finalized.ok) return { ok: false, errorKey: "validation" };
+    storedPath = finalized.finalPath;
+    storedSize = finalized.size;
+  }
+
   const { data: id, error } = await supabase.rpc("create_summary", {
     p_subject_id: input.subjectId,
     p_title: title,
     p_source: input.source,
     p_content: input.source === "content" ? input.content?.trim() : null,
     p_videos: input.videos?.filter((v) => v.trim().length > 0) ?? [],
-    p_storage_path: input.source === "upload" ? input.storagePath : null,
+    p_storage_path: input.source === "upload" ? storedPath : null,
     p_file_name: input.source === "upload" ? input.fileName : null,
-    p_mime_type: input.source === "upload" ? input.mimeType : null,
-    p_file_size: input.source === "upload" ? input.fileSize : null,
+    p_mime_type: input.source === "upload" ? "application/pdf" : null,
+    p_file_size: input.source === "upload" ? storedSize : null,
   });
 
   if (error) {
-    /* Compensation: remove the just-uploaded object so nothing is orphaned. */
-    if (input.storagePath) {
+    /* Compensation: remove the finalized object so nothing is orphaned. */
+    if (storedPath) {
       try {
-        await removeResource(input.storagePath);
+        await removeResource(storedPath);
       } catch {
         /* cleanup best-effort */
       }
@@ -503,8 +572,18 @@ export async function updateSummaryAction(
   const supabase = await createClient();
 
   if (input.source === "upload" && input.storagePath) {
-    /* New file for this summary: remove the OLD stored object after a
-       successful metadata update, as compensation for the swap. */
+    /* New file for this summary (already uploaded directly to Storage into the
+       caller's quarantine path): finalize = validate the actual stored bytes,
+       move it to its canonical path. The OLD stored object is removed only
+       after a successful metadata update. */
+    const finalized = await finalizeStoredUpload({
+      quarantinePath: input.storagePath,
+      userId: session.user.id,
+      kind: "summary",
+    });
+    if (!finalized.ok) return { ok: false, errorKey: "validation" };
+    const newPath = finalized.finalPath;
+
     const admin = createAdminClient();
     const { data: current } = await admin
       .from("summaries")
@@ -517,21 +596,21 @@ export async function updateSummaryAction(
       p_source: input.source,
       p_content: null,
       p_videos: input.videos?.filter((v) => v.trim().length > 0) ?? [],
-      p_storage_path: input.storagePath,
+      p_storage_path: newPath,
       p_file_name: input.fileName,
-      p_mime_type: input.mimeType,
-      p_file_size: input.fileSize,
+      p_mime_type: "application/pdf",
+      p_file_size: finalized.size,
     });
     if (error) {
       try {
-        await removeResource(input.storagePath);
+        await removeResource(newPath);
       } catch {
         /* best-effort */
       }
       return { ok: false, errorKey: mapRpcError(error.message) };
     }
     /* Best-effort removal of the superseded object. */
-    if (current?.storage_path && current.storage_path !== input.storagePath) {
+    if (current?.storage_path && current.storage_path !== newPath) {
       try {
         await removeResource(current.storage_path);
       } catch {
@@ -610,24 +689,32 @@ export async function createExamAction(
   }
 
   const supabase = await createClient();
+
+  /* Finalize the directly-uploaded exam: validate the actual stored bytes and
+     move it to its canonical path before metadata references it. */
+  const finalized = await finalizeStoredUpload({
+    quarantinePath: input.storagePath,
+    userId: session.user.id,
+    kind: "exam",
+  });
+  if (!finalized.ok) return { ok: false, errorKey: "validation" };
+
   const { data: id, error } = await supabase.rpc("create_exam", {
     p_subject_id: input.subjectId,
     p_type: input.type,
     p_year: input.year?.trim() || null,
     p_semester: input.semester || null,
-    p_storage_path: input.storagePath,
+    p_storage_path: finalized.finalPath,
     p_file_name: input.fileName,
-    p_mime_type: input.mimeType,
-    p_file_size: input.fileSize,
+    p_mime_type: "application/pdf",
+    p_file_size: finalized.size,
   });
 
   if (error) {
-    if (input.storagePath) {
-      try {
-        await removeResource(input.storagePath);
-      } catch {
-        /* best-effort */
-      }
+    try {
+      await removeResource(finalized.finalPath);
+    } catch {
+      /* cleanup best-effort */
     }
     return { ok: false, errorKey: mapRpcError(error.message) };
   }
@@ -661,8 +748,18 @@ export async function updateExamAction(
   const supabase = await createClient();
 
   if (input.storagePath) {
-    /* New file for this exam: remove the OLD stored object after a successful
-       metadata update, as compensation for the swap. */
+    /* New file for this exam (already uploaded directly to Storage into the
+       caller's quarantine path): finalize = validate the actual stored bytes,
+       move it to its canonical path. The OLD stored object is removed only
+       after a successful metadata update. */
+    const finalized = await finalizeStoredUpload({
+      quarantinePath: input.storagePath,
+      userId: session.user.id,
+      kind: "exam",
+    });
+    if (!finalized.ok) return { ok: false, errorKey: "validation" };
+    const newPath = finalized.finalPath;
+
     const admin = createAdminClient();
     const { data: current } = await admin
       .from("exam_files")
@@ -674,22 +771,22 @@ export async function updateExamAction(
       p_type: input.type,
       p_year: input.year?.trim() || null,
       p_semester: input.semester || null,
-      p_storage_path: input.storagePath,
+      p_storage_path: newPath,
       p_file_name: input.fileName,
-      p_mime_type: input.mimeType,
-      p_file_size: input.fileSize,
+      p_mime_type: "application/pdf",
+      p_file_size: finalized.size,
     });
     if (error) {
-      /* Compensation for the failed update: remove the NEW object so we do not
-         leak it, and keep the old object intact (the row still references it). */
+      /* Compensation for the failed update: remove the NEW (finalized) object
+         so we do not leak it, and keep the old object intact. */
       try {
-        await removeResource(input.storagePath);
+        await removeResource(newPath);
       } catch {
         /* best-effort */
       }
       return { ok: false, errorKey: mapRpcError(error.message) };
     }
-    if (current?.storage_path && current.storage_path !== input.storagePath) {
+    if (current?.storage_path && current.storage_path !== newPath) {
       try {
         await removeResource(current.storage_path);
       } catch {

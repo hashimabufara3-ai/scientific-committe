@@ -61,10 +61,10 @@ export type SubjectRef = {
 export type SummaryFormValues = {
   title: string;
   source: "upload" | "content";
-  /* The raw browser File chosen for a NEW upload. Absent when editing an
-     existing upload without replacing its file (metadata-only update). The
-     bytes are never read as a data URL — they go to Storage via the
-     /api/resources/upload route handler. */
+/* The raw browser File chosen for a NEW upload. Absent when editing an
+      existing upload without replacing its file (metadata-only update). The
+      bytes are never read as a data URL — they go directly to Storage via a
+      short-lived signed upload URL issued by /api/resources/upload-auth. */
   file?: File;
   /* Display name — either the newly chosen file's name or the existing
      stored file's name when editing (no replacement). */

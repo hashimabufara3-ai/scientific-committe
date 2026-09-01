@@ -1,5 +1,16 @@
 import { createAdminClient } from "../auth/supabase-server";
 
+/* Server-side env access for the storage REST helpers (the admin client does
+   not expose the project URL/keys). These must never be imported by browser
+   code — this module already requires the server-only supabase-server. */
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) {
+    throw new Error(`Missing Supabase environment variable: ${name}.`);
+  }
+  return value;
+}
+
 /* Server-only Supabase Storage helpers for the Resources/Summaries section.
 
    The bucket is PRIVATE ("resources"). There are no client upload policies, so
@@ -96,22 +107,174 @@ export function examStoragePath(mime: string): string {
   return `exams/${uuid()}.${ext}`;
 }
 
-/* Upload validated bytes to Storage. Accepts the raw browser File/Blob (from
-   the multipart route handler) or an explicit ArrayBuffer, and passes it
-   straight to the Storage client so the bytes are not copied through an extra
-   ArrayBuffer round-trip on the server.
-   Throws on failure — the caller should treat a thrown error as "upload
-   failed; do not create a metadata row". */
-export async function uploadResource(
-  path: string,
-  body: Blob | ArrayBuffer,
-  mime: string
-): Promise<void> {
+/* ---------------------------------------------------------------------------
+   Direct-to-Storage uploads (signed upload URLs).
+
+   Flow: the browser asks a server endpoint for a SHORT-LIVED signed upload URL
+   scoped to a server-generated quarantine path, PUTs the file straight to the
+   private bucket (the 3 MB body never passes through Render), then the server
+   re-reads the actual stored object (size + PDF magic bytes), moves it to the
+   canonical path, and only then writes metadata. The quarantine object is
+   never referenced by any resource row before validation and finalization.
+   --------------------------------------------------------------------------- */
+
+/* Quarantine prefix: objects here are untrusted until validate + move. */
+export const QUARANTINE_PREFIX = "quarantine/";
+
+/* Server-generated, user-scoped quarantine path. The user's id is embedded so
+   the finalize step can reject references to anyone else's pending object. */
+export function quarantineStoragePath(userId: string): string {
+  return `${QUARANTINE_PREFIX}${userId}/${uuid()}.pdf`;
+}
+
+/* Issue a short-lived signed upload URL for exactly `path` (server-generated
+   quarantine path). The returned signedUrl/token are scoped to that one object
+   and expire (storage-js default signed-upload TTL); the service-role key is
+   never exposed. The object is validated and moved out of quarantine by
+   finalizeStoredUpload shortly afterwards. */
+export async function createSignedUploadUrl(path: string): Promise<{
+  signedUrl: string;
+  token: string;
+  path: string;
+} | null> {
   const admin = createAdminClient();
-  const { error } = await admin.storage
+  const { data, error } = await admin.storage
     .from(RESOURCES_BUCKET)
-    .upload(path, body, { contentType: mime, upsert: false });
-  if (error) throw new Error(error.message);
+    .createSignedUploadUrl(path);
+  if (error || !data?.signedUrl || !data?.token) return null;
+  return { signedUrl: data.signedUrl, token: data.token, path: data.path ?? path };
+}
+
+/* Stored-object metadata (size / mimetype) via the Storage info endpoint.
+   Returns null when the object does not exist / info is unavailable. */
+export async function getStoredObjectInfo(path: string): Promise<{
+  size: number;
+  mimetype: string | null;
+} | null> {
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage.from(RESOURCES_BUCKET).info(path);
+  if (error || !data) return null;
+  const metadata = (data as { metadata?: Record<string, unknown> }).metadata ?? {};
+  const size =
+    typeof metadata.size === "number"
+      ? metadata.size
+      : typeof metadata.contentLength === "number"
+        ? metadata.contentLength
+        : typeof metadata.content_length === "number"
+          ? metadata.content_length
+          : NaN;
+  const mimetype =
+    typeof metadata.mimetype === "string" ? metadata.mimetype : null;
+  if (!Number.isFinite(size)) return null;
+  return { size, mimetype };
+}
+
+/* Read at most `maxBytes` of a stored object via an authenticated range GET.
+   Uses a bounded stream reader so even if the server ignores the Range header
+   we never pull the whole body into memory. Returns the bytes or null. */
+export async function readStoredObjectPrefix(
+  path: string,
+  maxBytes: number
+): Promise<Uint8Array | null> {
+  const base = `${requireEnv("NEXT_PUBLIC_SUPABASE_URL")}/storage/v1`;
+  const encoded = path
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+  let res: Response;
+  try {
+    res = await fetch(`${base}/object/${RESOURCES_BUCKET}/${encoded}`, {
+      headers: {
+        Authorization: `Bearer ${requireEnv("SUPABASE_SERVICE_ROLE_KEY")}`,
+        apikey: requireEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+        Range: `bytes=0-${maxBytes - 1}`,
+      },
+      cache: "no-store",
+    });
+  } catch {
+    return null;
+  }
+  if (!res.ok || !res.body) return null;
+
+  const reader = res.body.getReader();
+  const out = new Uint8Array(maxBytes);
+  let filled = 0;
+  try {
+    while (filled < maxBytes) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const take = Math.min(value.byteLength, maxBytes - filled);
+      out.set(value.subarray(0, take), filled);
+      filled += take;
+    }
+  } finally {
+    await reader.cancel();
+  }
+  return filled > 0 ? out.subarray(0, filled) : null;
+}
+
+async function safeRemove(path: string): Promise<void> {
+  if (!path) return;
+  try {
+    await removeResource(path);
+  } catch {
+    /* best-effort: orphan sweep (RESOURCE_CLEANUP_SECRET) can reclaim it */
+  }
+}
+
+/* Finalize a direct upload: verify the quarantine object is the caller's own,
+   validate the actual stored bytes (size + PDF signature), move it to the
+   canonical summaries/exams path, and clean up the quarantine object on any
+   failure so no untrusted object is ever reachable. Returns the final path
+   that the metadata RPC should store. */
+export async function finalizeStoredUpload(input: {
+  quarantinePath: string;
+  userId: string;
+  kind: "summary" | "exam";
+}): Promise<
+  | { ok: true; finalPath: string; size: number }
+  | { ok: false; error: "not_found" | "empty" | "too_large" | "invalid_type" | "move_failed" }
+> {
+  /* Only ever finalize an object the current user was issued a token for. */
+  if (!input.quarantinePath.startsWith(`${QUARANTINE_PREFIX}${input.userId}/`)) {
+    await safeRemove(input.quarantinePath);
+    return { ok: false, error: "invalid_type" };
+  }
+
+  const info = await getStoredObjectInfo(input.quarantinePath);
+  if (!info) {
+    await safeRemove(input.quarantinePath);
+    return { ok: false, error: "not_found" };
+  }
+  if (info.size <= 0) {
+    await safeRemove(input.quarantinePath);
+    return { ok: false, error: "empty" };
+  }
+  if (info.size > MAX_UPLOAD_BYTES) {
+    await safeRemove(input.quarantinePath);
+    return { ok: false, error: "too_large" };
+  }
+  const header = await readStoredObjectPrefix(input.quarantinePath, PDF_HEADER_MAX);
+  if (!header || !isPdfSignature(header)) {
+    await safeRemove(input.quarantinePath);
+    return { ok: false, error: "invalid_type" };
+  }
+
+  const finalPath =
+    input.kind === "exam"
+      ? examStoragePath("application/pdf")
+      : summaryStoragePath("application/pdf");
+
+  const admin = createAdminClient();
+  const { error: moveError } = await admin.storage
+    .from(RESOURCES_BUCKET)
+    .move(input.quarantinePath, finalPath);
+  if (moveError) {
+    await safeRemove(input.quarantinePath);
+    return { ok: false, error: "move_failed" };
+  }
+
+  return { ok: true, finalPath, size: info.size };
 }
 
 /* Generate a short-lived signed URL for a stored object.
