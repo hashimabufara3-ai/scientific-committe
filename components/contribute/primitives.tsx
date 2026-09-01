@@ -148,7 +148,9 @@ export function SmallButton({
   );
 }
 
-/* A compact version of the site's .btn-primary for in-workspace forms. */
+/* A compact version of the site's .btn-primary for in-workspace forms. Shares
+   the global button geometry (px-6 py-3) so every primary action reads as the
+   same object across marketing, authentication, and workspace surfaces. */
 export function PrimaryButton({
   className = "",
   ...props
@@ -156,7 +158,7 @@ export function PrimaryButton({
   return (
     <button
       type="button"
-      className={`btn-primary !px-5 !py-2 disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+      className={`btn-primary disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
       {...props}
     />
   );
@@ -169,7 +171,7 @@ export function GhostButton({
   return (
     <button
       type="button"
-      className={`btn-ghost !px-5 !py-2 disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
+      className={`btn-ghost disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
       {...props}
     />
   );

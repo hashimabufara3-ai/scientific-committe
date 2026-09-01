@@ -286,6 +286,7 @@ export default function ContributorDashboard({
 
           const created = await createNewMaterialAction(lang, {
             title: subjectRef.title,
+            titleAr: subjectRef.titleAr,
             summary: {
               title: values.title,
               source: values.source,
@@ -394,7 +395,7 @@ export default function ContributorDashboard({
     async (id: string, values: SubjectFormValues) => {
       if (!begin()) return;
       try {
-        const r = await updateSubjectAction(lang, id, values.title);
+        const r = await updateSubjectAction(lang, id, values.title, values.titleAr);
         if (!r.ok) {
           showToast(errorText(r.errorKey));
           return;

@@ -27,7 +27,11 @@
     "signIn": "Sign in",
     "signOut": "Sign out",
     "account": "Account",
-    "skipToContent": "Skip to content"
+    "skipToContent": "Skip to content",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "navPrimary": "Primary",
+    "navMobile": "Mobile"
   },
   "hero": {
     "kicker": "Palestine Technical University – Kadoorie · Al-Aroub Branch",
@@ -87,6 +91,8 @@
     "membersSubtitle": "A rotating team of student volunteers from across our majors.",
     "membersPrev": "Previous member",
     "membersNext": "Next member",
+    "membersEmpty": "No committee members to display yet.",
+    "teamMembers": "Team members",
     "activitiesKicker": "Activities",
     "activitiesTitle": "What we do on campus",
     "activities": [
@@ -117,7 +123,8 @@
     "subjectsSubtitle": "Each material collects the summaries students contribute. Add a summary to an existing material or create a new one.",
     "subjectsEmpty": "No subjects added yet. Start by adding your first subject.",
     "nav": {
-      "dashboard": "Dashboard"
+      "dashboard": "Dashboard",
+      "breadcrumb": "Breadcrumb"
     },
     "stats": {
       "subjects": "Materials",
@@ -203,6 +210,10 @@
     "forms": {
       "subjectName": "Material name",
       "subjectNamePlaceholder": "e.g. Computer Networks",
+      "subjectNameEn": "English title",
+      "subjectNameEnPlaceholder": "e.g. Computer Networks",
+      "subjectNameAr": "Arabic title",
+      "subjectNameArPlaceholder": "e.g. شبكات الحاسوب",
       "subjectChoose": "Choose a material",
       "subjectExisting": "Existing materials",
       "subjectNew": "Add new material",

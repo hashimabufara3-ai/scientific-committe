@@ -20,6 +20,10 @@ export type NavDict = {
   signIn: string;
   signOut: string;
   account: string;
+  openMenu: string;
+  closeMenu: string;
+  navPrimary: string;
+  navMobile: string;
   siteName: string;
   campus: string;
 };
@@ -82,7 +86,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
           subtitle={lang === "ar" ? dict.siteName.split(" ").slice(2).join(" ") : dict.campus}
         />
 
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Primary">
+        <nav className="hidden items-center gap-1 lg:flex" aria-label={dict.navPrimary}>
           {links.map((link) => (
             <Link
               key={link.href}
@@ -135,7 +139,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
             onClick={() => setOpen((v) => !v)}
             aria-expanded={open}
             aria-controls="mobile-nav"
-            aria-label={open ? "Close menu" : "Open menu"}
+            aria-label={open ? dict.closeMenu : dict.openMenu}
             className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-white/10 text-foreground transition hover:border-accent/40 lg:hidden"
           >
             {open ? <CloseIcon className="h-5 w-5" /> : <MenuIcon className="h-5 w-5" />}
@@ -148,7 +152,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
           id="mobile-nav"
           className="border-t border-white/10 bg-surface lg:hidden"
         >
-          <nav className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 sm:px-6" aria-label="Mobile">
+          <nav className="mx-auto flex max-w-6xl flex-col gap-1 px-4 py-4 sm:px-6" aria-label={dict.navMobile}>
             {links.map((link) => (
               <Link
                 key={link.href}

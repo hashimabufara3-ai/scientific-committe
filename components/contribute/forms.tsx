@@ -157,19 +157,21 @@ export function SubjectForm({
   busy?: boolean;
 }) {
   const [title, setTitle] = useState(initial?.title ?? "");
+  const [titleAr, setTitleAr] = useState(initial?.titleAr ?? "");
   const nameId = useId();
+  const nameArId = useId();
   /* No client-side duplicate detection here on purpose: the `subjects` prop is
      the active catalog but can be stale, and the server is the single
      authority. createSubjectAction / updateSubjectAction enforce the ACTIVE-only
      duplicate rule; a soft-deleted subject must never block re-using its name. */
-  const canSubmit = title.trim().length > 0;
+  const canSubmit = title.trim().length > 0 && titleAr.trim().length > 0;
 
   return (
     <form
       onSubmit={(e) => {
         e.preventDefault();
         if (!canSubmit || busy) return;
-        onSubmit({ title: title.trim() });
+        onSubmit({ title: title.trim(), titleAr: titleAr.trim() });
       }}
     >
       <FormShell
@@ -180,13 +182,22 @@ export function SubjectForm({
         hint={t.trustChip}
         busy={busy}
       >
-        <Field label={t.forms.subjectName} required htmlFor={nameId}>
+        <Field label={t.forms.subjectNameEn} required htmlFor={nameId}>
           <TextInput
             id={nameId}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={t.forms.subjectNamePlaceholder}
+            placeholder={t.forms.subjectNameEnPlaceholder}
             autoFocus
+          />
+        </Field>
+        <Field label={t.forms.subjectNameAr} required htmlFor={nameArId}>
+          <TextInput
+            id={nameArId}
+            dir="auto"
+            value={titleAr}
+            onChange={(e) => setTitleAr(e.target.value)}
+            placeholder={t.forms.subjectNameArPlaceholder}
           />
         </Field>
       </FormShell>
@@ -274,6 +285,7 @@ export function SummaryForm({
     ? options
     : options.filter((o) => o.searchText.includes(query));
   const [newSubjectTitle, setNewSubjectTitle] = useState("");
+  const [newSubjectTitleAr, setNewSubjectTitleAr] = useState("");
   const [title, setTitle] = useState(initial?.title ?? "");
   const [source, setSource] = useState<"upload" | "content">(initial?.source ?? "content");
   const [file, setFile] = useState<FileState>(() => ({
@@ -304,6 +316,7 @@ export function SummaryForm({
   const contentId = useId();
   const fileInputId = useId();
   const newSubjectId = useId();
+  const newSubjectIdAr = useId();
 
   /* Upload source needs the file either newly chosen (create / replace) or
      already present and kept (editing metadata only). Content needs text. */
@@ -316,7 +329,8 @@ export function SummaryForm({
     ? true
     : mode === "existing"
       ? selectedKey.length > 0
-      : newSubjectTitle.trim().length > 0;
+      : newSubjectTitle.trim().length > 0 &&
+        newSubjectTitleAr.trim().length > 0;
   /* No client-side duplicate detection for the "new subject" name on purpose:
      the `subjects` prop is the active catalog but can be stale, and the server
      side (createNewMaterialAction -> findActiveDuplicateSubject) is the single
@@ -355,7 +369,7 @@ export function SummaryForm({
           ? { subjectId: fixedSubject.id }
           : mode === "existing" && selectedMaterial
             ? { subjectId: selectedMaterial.subjectId }
-            : { title: newSubjectTitle.trim() };
+            : { title: newSubjectTitle.trim(), titleAr: newSubjectTitleAr.trim() };
         onSubmit(subjectRef, {
           title: title.trim(),
           source,
@@ -492,12 +506,25 @@ export function SummaryForm({
               </label>
               {mode === "new" && (
                 <div className="ms-5 space-y-2">
-                  <Field label={t.forms.subjectNewName} required htmlFor={newSubjectId}>
+                  <Field label={t.forms.subjectNameEn} required htmlFor={newSubjectId}>
                     <TextInput
                       id={newSubjectId}
                       value={newSubjectTitle}
                       onChange={(e) => setNewSubjectTitle(e.target.value)}
-                      placeholder={t.forms.subjectNewNamePlaceholder}
+                      placeholder={t.forms.subjectNameEnPlaceholder}
+                    />
+                  </Field>
+                  <Field
+                    label={t.forms.subjectNameAr}
+                    required
+                    htmlFor={newSubjectIdAr}
+                  >
+                    <TextInput
+                      id={newSubjectIdAr}
+                      dir="auto"
+                      value={newSubjectTitleAr}
+                      onChange={(e) => setNewSubjectTitleAr(e.target.value)}
+                      placeholder={t.forms.subjectNameArPlaceholder}
                     />
                   </Field>
                 </div>
@@ -509,15 +536,30 @@ export function SummaryForm({
             <legend className="mb-2 text-sm font-medium text-foreground">
               {t.forms.subjectNewName}
             </legend>
-            <Field label={t.forms.subjectName} required htmlFor={newSubjectId}>
-              <TextInput
-                id={newSubjectId}
-                value={newSubjectTitle}
-                onChange={(e) => setNewSubjectTitle(e.target.value)}
-                placeholder={t.forms.subjectNewNamePlaceholder}
-                autoFocus
-              />
-            </Field>
+            <div className="space-y-3">
+              <Field label={t.forms.subjectNameEn} required htmlFor={newSubjectId}>
+                <TextInput
+                  id={newSubjectId}
+                  value={newSubjectTitle}
+                  onChange={(e) => setNewSubjectTitle(e.target.value)}
+                  placeholder={t.forms.subjectNameEnPlaceholder}
+                  autoFocus
+                />
+              </Field>
+              <Field
+                label={t.forms.subjectNameAr}
+                required
+                htmlFor={newSubjectIdAr}
+              >
+                <TextInput
+                  id={newSubjectIdAr}
+                  dir="auto"
+                  value={newSubjectTitleAr}
+                  onChange={(e) => setNewSubjectTitleAr(e.target.value)}
+                  placeholder={t.forms.subjectNameArPlaceholder}
+                />
+              </Field>
+            </div>
             <p className="mt-2 text-xs text-muted">{t.forms.noSubjectsYet}</p>
           </fieldset>
         )}

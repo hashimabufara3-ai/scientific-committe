@@ -184,13 +184,15 @@ async function findActiveDuplicateSubject(
 
 export async function createSubjectAction(
   lang: string,
-  title: string
+  title: string,
+  titleAr?: string
 ): Promise<SubjectActionResult> {
   const session = await authorizeContributor(lang);
   if (!session) return { ok: false, errorKey: "notAllowed" };
 
   const trimmed = title.trim();
-  if (!trimmed) return { ok: false, errorKey: "validation" };
+  const trimmedAr = (titleAr ?? "").trim();
+  if (!trimmed || !trimmedAr) return { ok: false, errorKey: "validation" };
 
   const supabase = await createClient();
   const duplicateCheck = await findActiveDuplicateSubject(trimmed);
@@ -205,6 +207,7 @@ export async function createSubjectAction(
 
   const { data: id, error } = await supabase.rpc("create_subject", {
     p_title: trimmed,
+    p_title_ar: trimmedAr,
   });
   if (error) return { ok: false, errorKey: mapRpcError(error.message) };
 
@@ -213,8 +216,10 @@ export async function createSubjectAction(
 }
 
 export type CreateNewMaterialInput = {
-  /* New material name (the subject). */
+  /* New material localized names (the subject): English and Arabic, both
+     required. Never stored as one field. */
   title: string;
+  titleAr?: string;
   summary: {
     title: string;
     source: "upload" | "content";
@@ -258,8 +263,10 @@ export async function createNewMaterialAction(
   if (!session) return { ok: false, errorKey: "notAllowed" };
 
   const title = input.title.trim();
+  const titleAr = (input.titleAr ?? "").trim();
   const summaryTitle = input.summary.title.trim();
-  if (!title || !summaryTitle) return { ok: false, errorKey: "validation" };
+  if (!title || !titleAr || !summaryTitle)
+    return { ok: false, errorKey: "validation" };
   if (input.summary.source === "upload" && !input.summary.storagePath) {
     return { ok: false, errorKey: "uploadMissing" };
   }
@@ -302,6 +309,7 @@ export async function createNewMaterialAction(
 
   const { data: id, error } = await supabase.rpc("create_subject_with_summary", {
     p_title: title,
+    p_title_ar: titleAr,
     p_summary_title: summaryTitle,
     p_summary_source: input.summary.source,
     p_summary_content:
@@ -338,17 +346,20 @@ export async function createNewMaterialAction(
 export async function updateSubjectAction(
   lang: string,
   id: string,
-  title: string
+  title: string,
+  titleAr?: string
 ): Promise<SubjectActionResult> {
   const session = await authorizeContributor(lang);
   if (!session) return { ok: false, errorKey: "notAllowed" };
   const trimmed = title.trim();
-  if (!trimmed) return { ok: false, errorKey: "validation" };
+  const trimmedAr = (titleAr ?? "").trim();
+  if (!trimmed || !trimmedAr) return { ok: false, errorKey: "validation" };
 
   const supabase = await createClient();
   const { error } = await supabase.rpc("update_subject", {
     p_id: id,
     p_title: trimmed,
+    p_title_ar: trimmedAr,
   });
   if (error) return { ok: false, errorKey: mapRpcError(error.message) };
 

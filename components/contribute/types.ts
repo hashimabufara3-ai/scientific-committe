@@ -39,17 +39,23 @@ export type DeleteTarget =
 
 /* ---- Form value shapes (shared by create + inline edit) ------------------ */
 
-/* A subject needs nothing more than its name. */
+/* A subject's localized names: `title` is the English title and `titleAr` the
+   Arabic title. Both are required on create/edit; `titleAr` is typed optional
+   so legacy rows with a NULL Arabic title still load into the edit form, but
+   submission and the server reject a missing Arabic title. Never stored as one
+   field. */
 export type SubjectFormValues = {
   title: string;
+  titleAr?: string;
 };
 
 /* How the summary form resolves its subject: either an existing catalog
-   subject id picked from the list, or a name for a brand-new material.
-   Exactly one is set on submit. */
+   subject id picked from the list, or the localized names of a brand-new
+   material. Exactly one of subjectId / title is set on submit. */
 export type SubjectRef = {
   subjectId?: string;
   title?: string;
+  titleAr?: string;
 };
 
 export type SummaryFormValues = {

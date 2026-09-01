@@ -438,11 +438,13 @@ const ARROW_BTN =
 export default function AboutMembers({
   members: membersInput,
   labelledBy,
+  label = "Team members",
   prevLabel = "Previous member",
   nextLabel = "Next member",
 }: {
   members: { name: string; role: string; major: string; gender: string }[];
   labelledBy?: string;
+  label?: string;
   prevLabel?: string;
   nextLabel?: string;
 }) {
@@ -817,7 +819,7 @@ export default function AboutMembers({
         ref={stageRef}
         role="group"
         aria-roledescription="carousel"
-        aria-label="Team members"
+        aria-label={label}
         aria-labelledby={labelledBy}
         tabIndex={0}
         onKeyDown={onKeyDown}

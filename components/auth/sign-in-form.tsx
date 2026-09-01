@@ -67,7 +67,7 @@ export function SignInForm({
         <div className="flex justify-end">
           <Link
             href={`/${lang}/auth/forgot-password`}
-            className="text-xs font-medium text-accent transition-colors hover:text-accent-bright"
+            className="text-sm font-medium text-accent transition-colors hover:text-accent-bright"
           >
             {dict.signIn.forgotPassword}
           </Link>

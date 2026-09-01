@@ -96,14 +96,13 @@ export default async function AboutPage({ params }: PageProps<"/[lang]/about">) 
             <AboutMembers
               members={members}
               labelledBy="members-heading"
+              label={dict.about.teamMembers}
               prevLabel={dict.about.membersPrev}
               nextLabel={dict.about.membersNext}
             />
           ) : (
             <p className="mt-8 text-center text-sm text-muted">
-              {lang === "ar"
-                ? "لا يوجد أعضاء حالياً."
-                : "No committee members to display yet."}
+              {dict.about.membersEmpty}
             </p>
           )}
         </section>

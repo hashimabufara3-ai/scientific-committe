@@ -26,7 +26,11 @@
     "signIn": "تسجيل الدخول",
     "signOut": "تسجيل الخروج",
     "account": "الحساب",
-    "skipToContent": "تخطي إلى المحتوى"
+    "skipToContent": "تخطي إلى المحتوى",
+    "openMenu": "فتح القائمة",
+    "closeMenu": "إغلاق القائمة",
+    "navPrimary": "رئيسي",
+    "navMobile": "جوّال"
   },
   "hero": {
     "kicker": "جامعة فلسطين التقنية – خضوري · فرع العروب",
@@ -86,6 +90,8 @@
     "membersSubtitle": "فريق دوّار من الطلبة المتطوعين من مختلف تخصصاتنا.",
     "membersPrev": "العضو السابق",
     "membersNext": "العضو التالي",
+    "membersEmpty": "لا يوجد أعضاء حاليًا لعرضهم.",
+    "teamMembers": "أعضاء اللجنة",
     "activitiesKicker": "أنشطة",
     "activitiesTitle": "ماذا نفعل في الحرم الجامعي",
     "activities": [
@@ -116,7 +122,8 @@
     "subjectsSubtitle": "كل مادة تجمع الملخصات التي يساهم بها الطلاب. أضف ملخصاً إلى مادة قائمة أو أنشئ مادة جديدة.",
     "subjectsEmpty": "لا توجد مواد مضافة حالياً. ابدأ بإضافة أول مادة.",
     "nav": {
-      "dashboard": "اللوحة"
+      "dashboard": "اللوحة",
+      "breadcrumb": "مسار التنقل"
     },
     "stats": {
       "subjects": "المواد",
@@ -202,6 +209,10 @@
     "forms": {
       "subjectName": "اسم المادة",
       "subjectNamePlaceholder": "مثال: شبكات الحاسوب",
+      "subjectNameEn": "العنوان بالإنجليزية",
+      "subjectNameEnPlaceholder": "مثال: Computer Networks",
+      "subjectNameAr": "العنوان بالعربية",
+      "subjectNameArPlaceholder": "مثال: شبكات الحاسوب",
       "subjectChoose": "اختر مادة",
       "subjectExisting": "المواد الموجودة",
       "subjectNew": "إضافة مادة جديدة",

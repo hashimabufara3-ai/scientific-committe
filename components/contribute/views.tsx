@@ -218,11 +218,13 @@ function Pressable({
 
 function Breadcrumb({
   items,
+  label,
 }: {
   items: { label: string; onClick?: () => void; current?: boolean }[];
+  label: string;
 }) {
   return (
-    <nav aria-label="Breadcrumb" className="flex flex-wrap items-center gap-1.5 text-sm">
+    <nav aria-label={label} className="flex flex-wrap items-center gap-1.5 text-sm">
       {items.map((item, i) => (
         <span key={i} className="flex items-center gap-1.5">
           {i > 0 && (
@@ -636,6 +638,7 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
   return (
     <div>
       <Breadcrumb
+        label={t.nav.breadcrumb}
         items={[
           { label: t.nav.dashboard, onClick: api.onBackToDashboard },
           {
@@ -660,7 +663,7 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
         <div className="mt-6">
           <SubjectForm
             t={t}
-            initial={{ title: displayName(subject.title, subject.titleAr, lang) }}
+            initial={{ title: subject.title, titleAr: subject.titleAr }}
             submitLabel={t.actions.save}
             onSubmit={(values) => api.onSaveSubject(subject.id, values)}
             onCancel={api.onCancelEdit}
