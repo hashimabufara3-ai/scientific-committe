@@ -1,4 +1,4 @@
-import { revalidateTag } from "next/cache";
+import { updateTag } from "next/cache";
 
 /* Cache tags for PUBLIC, non-sensitive, display-only data.
    Only the homepage Hero committee-member count is cached (see
@@ -9,8 +9,16 @@ export const tags = {
 } as const;
 
 /* Invalidate the cached homepage Hero count. Called only AFTER a committee
-   member mutation succeeds. Uses the recommended 'max' profile
-   (stale-while-revalidate) so the next visitor gets a fresh count. */
+   member mutation succeeds.
+
+   We use updateTag (read-your-own-writes) rather than revalidateTag(tag, 'max')
+   because the admin who just mutated must see the new count on the very next
+   homepage render. revalidateTag with the 'max' profile uses
+   stale-while-revalidate, which serves the OLD cached count on the next visit
+   while refreshing in the background — that allowed the homepage to stay stale
+   after a mutation. updateTag immediately expires the tagged entry, so the
+   next request recomputes the count synchronously (no stale value served), and
+   it also invalidates the client-side Router Cache for the affected route. */
 export function revalidateHeroStats() {
-  revalidateTag(tags.heroStats, "max");
+  updateTag(tags.heroStats);
 }
