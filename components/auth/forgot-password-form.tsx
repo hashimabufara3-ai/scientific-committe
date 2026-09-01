@@ -36,13 +36,13 @@ export function ForgotPasswordForm({
 
       <form action={formAction} noValidate className="space-y-5">
         <input type="hidden" name="lang" value={lang} />
-        <Field label={dict.forgot.email} htmlFor="email" required>
+        <Field label={dict.forgot.identifier} htmlFor="identifier" required>
           <TextInput
-            id="email"
-            name="email"
-            type="email"
-            autoComplete="email"
-            placeholder={dict.forgot.emailPlaceholder}
+            id="identifier"
+            name="identifier"
+            type="text"
+            autoComplete="username"
+            placeholder={dict.forgot.identifierPlaceholder}
           />
         </Field>
         <PrimaryButton type="submit" disabled={pending} className="w-full">

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { AuthError } from "@supabase/supabase-js";
 import { getDictionary, hasLocale } from "../../app/[lang]/dictionaries";
-import { createClient } from "./supabase-server";
+import { createClient, createAdminClient } from "./supabase-server";
 import {
   isReservedUsername,
   isValidUsername,
@@ -14,11 +14,25 @@ import {
 import { getServerActionIP } from "../security/ip";
 import { checkRateLimit, emailKey, LIMITERS } from "../security/rate-limit";
 import { captureActionError } from "../security/sentry";
+import { logger } from "../logger";
+import {
+  dispatchRecoveryLink,
+  isValidRecoveryEmail,
+  normalizeRecoveryEmail,
+  isPtukscEmail,
+  describeRecoveryEmail,
+} from "./recovery-email";
 
 export type AuthState = {
   error?: string;
   success?: boolean;
   value?: string;
+  /* Set when the password change succeeded but an OPTIONAL recovery email was
+     also provided (first-time forced change). Carried separately so the UI can
+     surface a distinct, recoverable state instead of claiming the recovery
+     email was added when it was not. */
+  recoveryAdded?: boolean;
+  recoveryError?: boolean;
 };
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -270,33 +284,103 @@ export async function forgotPassword(
   const dict = await getDictionary(lang);
   const errors = dict.auth.errors;
 
-  const email = readString(formData, "email").trim();
-  if (!isValidEmail(email)) return { error: errors.invalidEmail };
+  const identifier = readString(formData, "identifier").trim();
+  if (!identifier) return { error: errors.required };
 
-  /* Rate limit: 3 requests / hour per IP AND per email.
+  /* Rate limit: 3 requests / hour per IP AND per identifier.
      When CF-Connecting-IP is absent, skip the IP check — no shared bucket.
-     The email check still runs and prevents cross-IP email bombing. */
+     The identifier check still runs and prevents cross-IP email bombing. */
   const ip = await getServerActionIP();
-  const [ipOk, emailOk] = await Promise.all([
+  const [ipOk, identifierOk] = await Promise.all([
     ip
       ? checkRateLimit(LIMITERS.forgotPasswordIp, ip)
       : ({ success: true } as const),
-    checkRateLimit(LIMITERS.forgotPasswordEmail, emailKey(email)),
+    checkRateLimit(LIMITERS.forgotPasswordEmail, emailKey(identifier.toLowerCase())),
   ]);
-  if (!ipOk.success || !emailOk.success) {
+  if (!ipOk.success || !identifierOk.success) {
     return { error: errors.rateLimited };
   }
 
   const origin = await getOrigin();
 
   const supabase = await createClient();
-  const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/${lang}/auth/callback?next=${encodeURIComponent(`/${lang}/auth/reset-password`)}`,
+
+  /* Resolve the identifier to the primary auth email (username OR @ptuksc.com
+     email) via the existing SECURITY DEFINER RPC. NULL means "no such account"
+     and is handled generically below so we never reveal existence. */
+  let authEmail: string | null;
+  const isEmail = identifier.includes("@");
+  if (isEmail) {
+    authEmail = identifier.toLowerCase();
+  } else {
+    const { data: resolvedEmail } = await supabase.rpc("resolve_auth_email", {
+      p_identifier: identifier,
+    });
+    authEmail = resolvedEmail ?? null;
+  }
+
+  /* No such account (or identifier unresolved): generic success, with the same
+     timing-hardening delay used on the sign-in fast path so the response time
+     does not reveal whether an account exists. */
+  if (!authEmail) {
+    await delayAuthProbe();
+    return { success: true };
+  }
+
+  /* Rate limit the recovery dispatch per account (defense in depth against
+     targeted abuse even though enumeration is protected). */
+  const { success: dispatchOk } = await checkRateLimit(
+    LIMITERS.recoveryDispatch,
+    authEmail
+  );
+  if (!dispatchOk) return { success: true }; // still generic
+
+  /* Look up the account's VERIFIED external recovery email. Done with the
+     server-only admin client so the address never reaches client code and the
+     lookup stays private (service role bypasses RLS — never exposed). */
+  const admin = createAdminClient();
+  const { data: profile } = await admin
+    .from("profiles")
+    .select("recovery_email, recovery_email_confirmed_at")
+    .eq("email", authEmail)
+    .maybeSingle();
+
+  const recoveryEmail = profile?.recovery_email;
+  const recoveryVerified = !!profile?.recovery_email_confirmed_at;
+
+  const redirectTo = `${origin}/${lang}/auth/callback?next=${encodeURIComponent(
+    `/${lang}/auth/reset-password`
+  )}`;
+
+  if (recoveryEmail && recoveryVerified) {
+    /* Verified external recovery email: send the native Supabase recovery link
+       there via Resend. NEVER call resetPasswordForEmail() on this branch (it
+       targets auth.users.email) and NEVER send to @ptuksc.com. */
+    const dispatched = await dispatchRecoveryLink({
+      primaryEmail: authEmail,
+      toExternalEmail: recoveryEmail,
+      redirectTo,
+      subject: "Reset your password",
+      intro: "Use the link below to reset your password. If you did not request this, you can ignore this email.",
+      buttonLabel: "Reset my password",
+    });
+    /* Enum-safe: regardless of delivery outcome we return the same generic
+       success so we never reveal account/recovery/delivery state. */
+    void dispatched;
+    logger.info("recovery dispatch attempted", {
+      to: describeRecoveryEmail(recoveryEmail),
+      ok: dispatched,
+    });
+    return { success: true };
+  }
+
+  /* No verified external recovery email: preserve the existing native behavior
+     exactly (Supabase sends the recovery link to auth.users.email). */
+  const { error } = await supabase.auth.resetPasswordForEmail(authEmail, {
+    redirectTo,
   });
   if (error) {
     const mapped = mapAuthError(error, errors);
-    // Surface only real failures (rate limiting, network). Everything else —
-    // including "user not found" — shows the same safe success message.
     if (
       mapped === errors.rateLimited ||
       mapped === errors.network ||
@@ -304,6 +388,209 @@ export async function forgotPassword(
     ) {
       return { error: mapped };
     }
+  }
+
+  return { success: true };
+}
+
+/* ---------------------------------------------------------------------------
+   External recovery-email management (Phase 2 / 5).
+
+   All of these run server-side only. They:
+     - require an authenticated user
+     - validate + normalize the candidate external address
+     - reject @ptuksc.com and the caller's own primary email
+     - rate-limit every operation
+     - send the verification/recovery link via the Resend adapter using Supabase
+       native generateLink (never exposing the link to the browser)
+     - never reveal whether an account/address exists (generic UX)
+--------------------------------------------------------------------------- */
+
+/* Begin adding/changing the caller's recovery email. Stores an UNVERIFIED
+   candidate, then emails a verification link to it. The existing verified
+   address (if any) is not usable for recovery until the new one is confirmed. */
+export async function startRecoveryEmailChange(
+  _prev: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const lang = readLang(formData);
+  const dict = await getDictionary(lang);
+  const errors = dict.auth.errors;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect(`/${lang}/auth/sign-in`);
+
+  const candidate = normalizeRecoveryEmail(readString(formData, "email"));
+  if (!candidate) return { error: errors.required };
+
+  const result = await saveRecoveryEmailForUser({
+    supabase,
+    user,
+    candidate,
+    errors,
+    lang,
+  });
+  if (!result.ok) return { error: result.error };
+
+  revalidatePath(`/${lang}/account`);
+  return { success: true };
+}
+
+/* Shared persistence for a recovery-email candidate. Used both by the account
+   page (`startRecoveryEmailChange`) and by the OPTIONAL recovery field on the
+   first-time forced password-change flow (`forceChangePassword`), so the
+   validation rules, rate limiting, RPC and verification dispatch are never
+   duplicated. Behaviour (matches the approved attempt 20260901120000):
+     - validates with the existing recovery-email rules
+     - applies the existing recoveryEmailSet rate limiter
+     - stores an UNVERIFIED candidate via set_recovery_email (confirmed_at NULL)
+     - emails a verification link through the existing dispatchRecoveryLink()
+     - NEVER marks the address verified here — only the existing
+       confirm_recovery_email() flow (via /auth/verify-recovery-email) can.
+   Returns a localized message for every failure so callers can either surface
+   it (account page) or collapse it into a generic recoverable state. */
+type SaveRecoveryEmailResult = { ok: true } | { ok: false; error: string };
+
+async function saveRecoveryEmailForUser({
+  supabase,
+  user,
+  candidate,
+  errors,
+  lang,
+}: {
+  supabase: Awaited<ReturnType<typeof createClient>>;
+  user: { id: string; email?: string | null };
+  candidate: string;
+  errors: DictionaryAuthErrors;
+  lang: string;
+}): Promise<SaveRecoveryEmailResult> {
+  if (!isValidRecoveryEmail(candidate)) return { ok: false, error: errors.invalidEmail };
+  if (isPtukscEmail(candidate)) return { ok: false, error: errors.recoveryEmailPtuksc };
+
+  /* Do not allow the recovery address to equal the primary identity. */
+  const primaryLower = (user.email ?? "").trim().toLowerCase();
+  if (primaryLower === candidate) return { ok: false, error: errors.recoveryEmailPrimary };
+
+  /* Rate limit set/change per user. */
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.recoveryEmailSet,
+    user.id
+  );
+  if (!allowed) return { ok: false, error: errors.rateLimited };
+
+  /* Persist the unverified candidate (DB enforces one-address-per-account via
+     the unique index; the RPC also validates @ptuksc.com/primary/existence). */
+  const { error: setError } = await supabase.rpc("set_recovery_email", {
+    p_email: candidate,
+  });
+  if (setError) {
+    captureActionError(setError, "set_recovery_email failed", {
+      action: "saveRecoveryEmailForUser",
+      route: `/${lang}/account`,
+      code: setError.code,
+    });
+    const message = (setError.message ?? "").toLowerCase();
+    if (message.includes("already in use")) return { ok: false, error: errors.recoveryEmailTaken };
+    if (message.includes("ptuksc")) return { ok: false, error: errors.recoveryEmailPtuksc };
+    if (message.includes("cannot be the account identity"))
+      return { ok: false, error: errors.recoveryEmailPrimary };
+    return { ok: false, error: errors.generic };
+  }
+
+  const origin = await getOrigin();
+
+  /* Send the verification link to the candidate via Resend. Uses a native
+     Supabase recovery link so the existing confirm/callback chain verifies it;
+     the redirect lands on the email-verification confirm route. */
+  await dispatchRecoveryLink({
+    primaryEmail: primaryLower,
+    toExternalEmail: candidate,
+    redirectTo: `${origin}/${lang}/auth/callback?next=${encodeURIComponent(
+      `/${lang}/auth/verify-recovery-email`
+    )}`,
+    subject: "Verify your recovery email",
+    intro: "Use the link below to verify your recovery email. If you did not request this, you can ignore this email.",
+    buttonLabel: "Verify my recovery email",
+  });
+
+  return { ok: true };
+}
+
+/* Resend a verification link to the caller's current (unverified) recovery
+   email candidate. */
+export async function resendRecoveryEmailVerification(
+  _prev: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const lang = readLang(formData);
+  const dict = await getDictionary(lang);
+  const errors = dict.auth.errors;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect(`/${lang}/auth/sign-in`);
+
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.recoveryEmailVerify,
+    user.id
+  );
+  if (!allowed) return { error: errors.rateLimited };
+
+  /* Read the caller's current recovery email (server-only, own row). */
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("recovery_email, recovery_email_confirmed_at")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  const candidate = profile?.recovery_email;
+  if (!candidate || profile.recovery_email_confirmed_at) {
+    /* Nothing to verify (none set, or already verified) — keep UX generic. */
+    return { success: true };
+  }
+
+  const origin = await getOrigin();
+  await dispatchRecoveryLink({
+    primaryEmail: (user.email ?? "").trim().toLowerCase(),
+    toExternalEmail: candidate,
+    redirectTo: `${origin}/${lang}/auth/callback?next=${encodeURIComponent(
+      `/${lang}/auth/verify-recovery-email`
+    )}`,
+    subject: "Verify your recovery email",
+    intro: "Use the link below to verify your recovery email. If you did not request this, you can ignore this email.",
+    buttonLabel: "Verify my recovery email",
+  });
+
+  return { success: true };
+}
+
+/* Clear the caller's recovery email entirely. */
+export async function clearRecoveryEmail(
+  _prev: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const lang = readLang(formData);
+  const dict = await getDictionary(lang);
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect(`/${lang}/auth/sign-in`);
+
+  const { error } = await supabase.rpc("clear_recovery_email");
+  if (error) {
+    captureActionError(error, "clear_recovery_email failed", {
+      action: "clearRecoveryEmail",
+      route: `/${lang}/account`,
+      code: error.code,
+    });
+    return { error: dict.auth.errors.generic };
   }
 
   return { success: true };
@@ -517,6 +804,31 @@ export async function forceChangePassword(
     });
     /* Non-fatal: the password was changed. The proxy will continue to
        redirect, but the user can sign in with the new password. */
+  }
+
+  /* OPTIONAL recovery email. Empty/blank keeps the exact pre-existing return
+     path (must_change_password flow is unchanged). When provided, the same
+     shared recovery persistence used by My Account runs AFTER the password
+     change succeeds — two independent sequential operations, never a cross-
+     system transaction. The password change always wins: a recovery failure is
+     reported as a distinct recoverable state, never as a claim that the
+     recovery email was saved. */
+  const recoveryRaw = readString(formData, "recoveryEmail").trim();
+  if (recoveryRaw) {
+    const candidate = normalizeRecoveryEmail(recoveryRaw);
+    if (candidate) {
+      const result = await saveRecoveryEmailForUser({
+        supabase,
+        user,
+        candidate,
+        errors,
+        lang,
+      });
+      if (result.ok) {
+        return { success: true, value: `/${lang}`, recoveryAdded: true };
+      }
+    }
+    return { success: true, value: `/${lang}`, recoveryError: true };
   }
 
   return { success: true, value: `/${lang}` };

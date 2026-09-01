@@ -6,6 +6,7 @@ import SectionHeading from "../../../components/section-heading";
 import { Panel } from "../../../components/contribute/primitives";
 import { SignOutButton } from "../../../components/auth/sign-out-button";
 import { UsernameField } from "../../../components/account/username-field";
+import { RecoveryEmailField } from "../../../components/account/recovery-email-field";
 
 export const dynamic = "force-dynamic";
 
@@ -56,6 +57,15 @@ export default async function AccountPage({
   const role = profile?.role
     ? dict.auth.account.roles[profile.role]
     : dict.auth.account.roles.student;
+
+  /* Recovery-email status: only a masked representation is returned by the
+     SECURITY DEFINER RPC, so the full external address never leaves the server
+     (and is never persisted anywhere client-visible). */
+  const { data: recoveryStatus } = await supabase.rpc(
+    "get_recovery_email_status"
+  );
+  const maskedRecoveryEmail = recoveryStatus?.[0]?.masked_email ?? null;
+  const recoveryEmailVerified = recoveryStatus?.[0]?.is_verified ?? false;
   const memberSince = new Intl.DateTimeFormat(lang === "ar" ? "ar" : "en", {
     year: "numeric",
     month: "long",
@@ -111,6 +121,14 @@ export default async function AccountPage({
               errors={dict.auth.errors}
             />
           )}
+
+          <RecoveryEmailField
+            lang={lang}
+            maskedEmail={maskedRecoveryEmail}
+            verified={recoveryEmailVerified}
+            t={dict.auth.account}
+            errors={dict.auth.errors}
+          />
 
           <div className="mt-8 border-t border-white/10 pt-6">
             <SignOutButton
