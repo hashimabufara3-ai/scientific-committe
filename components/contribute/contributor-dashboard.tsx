@@ -60,22 +60,41 @@ type UploadResult = {
   fileSize: number;
 };
 
+/* Why an upload was rejected, so the UI can show a specific localized message
+   instead of one generic "could not upload". "type" also covers files whose
+   declared MIME or magic bytes are not PDF. */
+type UploadFailure = "type" | "size" | "network";
+
+type UploadOutcome =
+  | { ok: true; value: UploadResult }
+  | { ok: false; reason: UploadFailure };
+
 /* Upload a raw browser File to Storage via the Route Handler. Only the Storage
    path + display metadata come back; bytes never leave the request body except
-   as the multipart stream being written to the bucket. */
+   as the multipart stream being written to the bucket. The server (MIME + size
+   + PDF magic bytes) is authoritative — a failed 422 maps to type/size. */
 async function uploadFile(
   file: File,
   kind: "summary" | "exam"
-): Promise<UploadResult | null> {
+): Promise<UploadOutcome> {
   try {
     const fd = new FormData();
     fd.set("file", file);
     fd.set("kind", kind);
     const res = await fetch("/api/resources/upload", { method: "POST", body: fd });
-    if (!res.ok) return null;
-    return (await res.json()) as UploadResult;
+    if (res.status === 422) {
+      const body = (await res.json().catch(() => ({}))) as {
+        error?: string;
+      };
+      return {
+        ok: false,
+        reason: body.error === "too_large" ? "size" : "type",
+      };
+    }
+    if (!res.ok) return { ok: false, reason: "network" };
+    return { ok: true, value: (await res.json()) as UploadResult };
   } catch {
-    return null;
+    return { ok: false, reason: "network" };
   }
 }
 
@@ -162,6 +181,16 @@ export default function ContributorDashboard({
     [t.errors, t.forms],
   );
 
+  /* Localized message for an upload rejection reason. */
+  const uploadErrorText = useCallback(
+    (reason: UploadFailure) => {
+      if (reason === "type") return t.forms.unsupportedFileType;
+      if (reason === "size") return t.forms.fileTooLarge;
+      return t.errors.upload;
+    },
+    [t],
+  );
+
   /* Single re-entrancy guard for every mutation: keeps double submission from
      firing while an upload or Server Action is in flight. */
   const begin = useCallback(() => {
@@ -205,18 +234,18 @@ export default function ContributorDashboard({
               return;
             }
             const upload = await uploadFile(values.file, "summary");
-            if (!upload) {
-              showToast(t.errors.upload);
+            if (!upload.ok) {
+              showToast(uploadErrorText(upload.reason));
               return;
             }
             const created = await createSummaryAction(lang, {
               subjectId: subjectRef.subjectId,
               title: values.title,
               source: "upload",
-              storagePath: upload.path,
-              fileName: upload.fileName,
-              mimeType: upload.mimeType,
-              fileSize: upload.fileSize,
+              storagePath: upload.value.path,
+              fileName: upload.value.fileName,
+              mimeType: upload.value.mimeType,
+              fileSize: upload.value.fileSize,
               videos: values.videos,
             });
             if (!created.ok) {
@@ -241,20 +270,20 @@ export default function ContributorDashboard({
              best-effort, never gates the summary being published. */
           if (values.exam?.file) {
             const examUpload = await uploadFile(values.exam.file, "exam");
-            if (examUpload) {
+            if (!examUpload.ok) {
+              showToast(uploadErrorText(examUpload.reason));
+            } else {
               const created = await createExamAction(lang, {
                 subjectId: subjectRef.subjectId,
                 type: values.exam.type,
                 year: values.exam.year,
                 semester: values.exam.semester,
-                storagePath: examUpload.path,
-                fileName: examUpload.fileName,
-                mimeType: examUpload.mimeType,
-                fileSize: examUpload.fileSize,
+                storagePath: examUpload.value.path,
+                fileName: examUpload.value.fileName,
+                mimeType: examUpload.value.mimeType,
+                fileSize: examUpload.value.fileSize,
               });
               if (!created.ok) showToast(errorText(created.errorKey));
-            } else {
-              showToast(t.errors.upload);
             }
           }
         } else if (subjectRef.title) {
@@ -270,18 +299,20 @@ export default function ContributorDashboard({
               showToast(t.errors.uploadMissing);
               return;
             }
-            upload = await uploadFile(values.file, "summary");
-            if (!upload) {
-              showToast(t.errors.upload);
+            const res = await uploadFile(values.file, "summary");
+            if (!res.ok) {
+              showToast(uploadErrorText(res.reason));
               return;
             }
+            upload = res.value;
           }
 
           const exam = values.exam;
           let examUpload;
           if (exam?.file) {
-            examUpload = await uploadFile(exam.file, "exam");
-            if (!examUpload) showToast(t.errors.upload);
+            const res = await uploadFile(exam.file, "exam");
+            if (!res.ok) showToast(uploadErrorText(res.reason));
+            else examUpload = res.value;
           }
 
           const created = await createNewMaterialAction(lang, {
@@ -341,7 +372,7 @@ export default function ContributorDashboard({
         end();
       }
     },
-    [begin, end, errorText, lang, pushActivity, router, showToast, t],
+    [begin, end, errorText, lang, pushActivity, router, showToast, t, uploadErrorText],
   );
 
   const onCreateExam = useCallback(
@@ -354,8 +385,8 @@ export default function ContributorDashboard({
           return;
         }
         const upload = await uploadFile(values.file, "exam");
-        if (!upload) {
-          showToast(t.errors.upload);
+        if (!upload.ok) {
+          showToast(uploadErrorText(upload.reason));
           return;
         }
         const created: ExamActionResult = await createExamAction(lang, {
@@ -363,10 +394,10 @@ export default function ContributorDashboard({
           type: values.type,
           year: values.year,
           semester: values.semester,
-          storagePath: upload.path,
-          fileName: upload.fileName,
-          mimeType: upload.mimeType,
-          fileSize: upload.fileSize,
+          storagePath: upload.value.path,
+          fileName: upload.value.fileName,
+          mimeType: upload.value.mimeType,
+          fileSize: upload.value.fileSize,
         });
         if (!created.ok) {
           showToast(errorText(created.errorKey));
@@ -381,12 +412,12 @@ export default function ContributorDashboard({
         );
         showToast(t.toast.createdExam);
         setOpenForm(null);
-        setEditing(null);
+setEditing(null);
       } finally {
         end();
       }
     },
-    [begin, end, errorText, lang, pushActivity, router, showToast, t],
+    [begin, end, errorText, lang, pushActivity, router, showToast, t, uploadErrorText],
   );
 
   /* ---- Edit -------------------------------------------------------------- */
@@ -427,17 +458,17 @@ export default function ContributorDashboard({
              update metadata (the action removes the OLD object only after a
              successful DB update). */
           const upload = await uploadFile(values.file, "summary");
-          if (!upload) {
-            showToast(t.errors.upload);
+          if (!upload.ok) {
+            showToast(uploadErrorText(upload.reason));
             return;
           }
           r = await updateSummaryAction(lang, {
             ...base,
             source: "upload",
-            storagePath: upload.path,
-            fileName: upload.fileName,
-            mimeType: upload.mimeType,
-            fileSize: upload.fileSize,
+            storagePath: upload.value.path,
+            fileName: upload.value.fileName,
+            mimeType: upload.value.mimeType,
+            fileSize: upload.value.fileSize,
           });
         } else if (values.source === "upload") {
           /* Keeping the existing stored file — metadata only. */
@@ -461,7 +492,7 @@ export default function ContributorDashboard({
         end();
       }
     },
-    [begin, end, errorText, lang, pushActivity, router, showToast, t],
+    [begin, end, errorText, lang, pushActivity, router, showToast, t, uploadErrorText],
   );
 
   const onSaveExam = useCallback(
@@ -472,16 +503,16 @@ export default function ContributorDashboard({
         let r: ExamActionResult;
         if (values.file) {
           const upload = await uploadFile(values.file, "exam");
-          if (!upload) {
-            showToast(t.errors.upload);
+          if (!upload.ok) {
+            showToast(uploadErrorText(upload.reason));
             return;
           }
           r = await updateExamAction(lang, {
             ...base,
-            storagePath: upload.path,
-            fileName: upload.fileName,
-            mimeType: upload.mimeType,
-            fileSize: upload.fileSize,
+            storagePath: upload.value.path,
+            fileName: upload.value.fileName,
+            mimeType: upload.value.mimeType,
+            fileSize: upload.value.fileSize,
           });
         } else {
           /* No new file — preserve the existing stored one. */
@@ -504,7 +535,7 @@ export default function ContributorDashboard({
         end();
       }
     },
-    [begin, end, errorText, lang, pushActivity, router, showToast, t],
+    [begin, end, errorText, lang, pushActivity, router, showToast, t, uploadErrorText],
   );
 
   /* ---- Delete (soft, owner-only, via Server Actions) --------------------- */

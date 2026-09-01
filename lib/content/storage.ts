@@ -21,23 +21,47 @@ import { createAdminClient } from "../auth/supabase-server";
 
 export const RESOURCES_BUCKET = "resources";
 
-/* Allowed upload MIME types + the file extension to use for the storage key.
-   Only genuinely renderable/downloadable documents are accepted. */
+/* Allowed upload MIME type + the file extension to use for the storage key.
+   NEW uploads are PDF-only. Existing files of other previously-allowed types
+   (PNG/JPEG/WebP/TXT) are untouched: they keep their stored metadata/path and
+   continue to be served by the read/view/download code paths whose rendering
+   is generic over the stored file type. */
 const ALLOWED_TYPES: Record<string, string> = {
   "application/pdf": "pdf",
-  "image/png": "png",
-  "image/jpeg": "jpg",
-  "image/webp": "webp",
-  "text/plain": "txt",
 };
 
-/* Preserve the prototype's 2 MB cap unless the UI shows a need to change it. */
-export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024;
+/* Preserve the prototype's cap unless the UI shows a need to change it. */
+export const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
+
+/* The PDF file signature "%PDF-" (0x25 0x50 0x44 0x46 0x2D). The PDF spec
+   allows leading whitespace before the header, so the signature is searched
+   within the first 1024 bytes of the file rather than only at byte 0. */
+const PDF_HEADER_MAX = 1024;
+const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d]; // % P D F -
+
+/* Verifies the first bytes of an uploaded file really carry a PDF signature,
+   independent of the browser-reported MIME type (which is client-controlled and
+   trivially spoofable). Reads only up to 1 KB of header, never the whole file.
+   Returns false for empty/short files and for any file without "%PDF-". */
+export function isPdfSignature(bytes: Uint8Array): boolean {
+  if (!bytes || bytes.length < PDF_SIGNATURE.length) return false;
+  const limit = Math.min(bytes.length, PDF_HEADER_MAX);
+  outer: for (let i = 0; i <= limit - PDF_SIGNATURE.length; i++) {
+    for (let j = 0; j < PDF_SIGNATURE.length; j++) {
+      if (bytes[i + j] !== PDF_SIGNATURE[j]) continue outer;
+    }
+    return true;
+  }
+  return false;
+}
 
 /* Validate a raw file upload: MIME must be on the allowlist and size must be
    within MAX_UPLOAD_BYTES. Rejects images whose browser-reported type is
    generic (e.g. an empty string or "application/octet-stream") as well, so the
-   allowlist is always authoritative. Returns an error code for the client. */
+   allowlist is always authoritative for the declared type. The PDF magic-byte
+   authenticity check (isPdfSignature) is applied separately by the upload route
+   because it needs a byte slice of the file. Returns an error code for the
+   client. */
 export function validateFileUpload(
   mime: string,
   size: number

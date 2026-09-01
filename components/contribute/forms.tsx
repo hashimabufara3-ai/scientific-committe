@@ -111,6 +111,7 @@ function FileUploadField({
       <input
         id={inputId}
         type="file"
+        accept=".pdf,application/pdf"
         className="hidden"
         onChange={(e) => {
           const selected = e.target.files?.[0];
@@ -118,6 +119,20 @@ function FileUploadField({
           if (selected.size > MAX_FILE_BYTES) {
             e.target.value = "";
             onFile({ ...emptyFileState(), fileError: t.forms.fileTooLarge });
+            return;
+          }
+          /* UX-only pre-check: new uploads are PDF-only. The server's
+             magic-byte validation remains authoritative and rejects spoofed
+             files regardless of this check. */
+          const isPdf =
+            selected.type === "application/pdf" ||
+            /\.pdf$/i.test(selected.name);
+          if (!isPdf) {
+            e.target.value = "";
+            onFile({
+              ...emptyFileState(),
+              fileError: t.forms.unsupportedFileType,
+            });
             return;
           }
           onFile({
@@ -130,6 +145,7 @@ function FileUploadField({
           });
         }}
       />
+      <p className="mt-2 text-xs text-muted">{t.forms.fileUploadHint}</p>
       {file.fileError && (
         <p role="alert" className="mt-2 text-xs text-red-300">
           {file.fileError}
@@ -227,9 +243,10 @@ type MaterialOption = {
   searchText: string;
 };
 
-/* Prototype upload cap (2 MB), preserved from the prototype's budget. The
-   browser sends the raw File via multipart to Storage, which has the same cap. */
-const MAX_FILE_BYTES = 2 * 1024 * 1024;
+/* Upload cap (3 MB), kept in sync with MAX_UPLOAD_BYTES in
+   lib/content/storage.ts. The browser sends the raw File via multipart to
+   Storage, which has the same cap. The server check is authoritative. */
+const MAX_FILE_BYTES = 3 * 1024 * 1024;
 
 export function SummaryForm({
   t,

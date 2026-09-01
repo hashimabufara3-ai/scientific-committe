@@ -7,6 +7,7 @@ import {
 } from "../../../../lib/security/rate-limit";
 import {
   examStoragePath,
+  isPdfSignature,
   summaryStoragePath,
   uploadResource,
   validateFileUpload,
@@ -38,8 +39,10 @@ import {
    - Authenticates the actor with the cookie-bound session and requires at
      least contributor (the same gate the workflow page enforces).
    - Applies the existing rate limiter.
-   - Validates the ACTUAL uploaded bytes server-side: MIME on the allowlist
-     and size <= MAX_UPLOAD_BYTES.
+   - Validates the ACTUAL uploaded bytes server-side: MIME must be on the
+     PDF allowlist, size <= MAX_UPLOAD_BYTES (3 MB), and the bytes must carry
+     a real PDF magic-byte signature (a claimed "application/pdf" without
+     "%PDF-" is rejected).
    - The object path is generated server-side (UUID-based, e.g.
      summaries/<uuid>.pdf) — never taken from the client — and does not
      require the subject id. */
@@ -80,6 +83,15 @@ export async function POST(request: NextRequest) {
   const validation = validateFileUpload(file.type, file.size);
   if (!validation.ok) {
     return NextResponse.json({ error: validation.error }, { status: 422 });
+  }
+
+  /* Authoritative type authenticity: verify the real bytes carry a PDF
+     signature (%PDF-, within the first 1 KB), not just the browser-reported
+     MIME (which is client-controlled and spoofable). Reads at most the 1 KB
+     header slice of the file — never the whole body. */
+  const header = new Uint8Array(await file.slice(0, 1024).arrayBuffer());
+  if (!isPdfSignature(header)) {
+    return NextResponse.json({ error: "invalid_type" }, { status: 422 });
   }
 
   try {
