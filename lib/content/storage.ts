@@ -314,6 +314,7 @@ export async function finalizeStoredUpload(input: {
   /* Diagnostic pacing log. NEVER log the quarantine path, the user id, signed
      URLs, tokens, or credentials — only kind + safe numeric/boolean fields. */
   logger.info("finalize upload: begin", { kind: input.kind });
+  const finalizeStartedMs = performance.now();
 
   /* Only ever finalize an object the current user was issued a token for. */
   if (!input.quarantinePath.startsWith(`${QUARANTINE_PREFIX}${input.userId}/`)) {
@@ -325,7 +326,12 @@ export async function finalizeStoredUpload(input: {
     return { ok: false, error: "invalid_type" };
   }
 
+  const infoStartedMs = performance.now();
   const info = await getStoredObjectInfo(input.quarantinePath);
+  logger.info("publish timing: storage info", {
+    step: "info",
+    durationMs: Math.round(performance.now() - infoStartedMs),
+  });
   if (!info) {
     await safeRemove(input.quarantinePath);
     logger.warn("finalize failed: object info unavailable", {
@@ -357,7 +363,12 @@ export async function finalizeStoredUpload(input: {
     return { ok: false, error: "too_large" };
   }
 
+  const headerStartedMs = performance.now();
   const header = await readStoredObjectPrefix(input.quarantinePath, PDF_HEADER_MAX);
+  logger.info("publish timing: storage prefix", {
+    step: "prefix",
+    durationMs: Math.round(performance.now() - headerStartedMs),
+  });
   if (!header) {
     await safeRemove(input.quarantinePath);
     logger.warn("finalize failed: header unreadable", {
@@ -385,9 +396,14 @@ export async function finalizeStoredUpload(input: {
       : summaryStoragePath("application/pdf");
 
   const admin = createAdminClient();
+  const moveStartedMs = performance.now();
   const { error: moveError } = await admin.storage
     .from(RESOURCES_BUCKET)
     .move(input.quarantinePath, finalPath);
+  logger.info("publish timing: storage move", {
+    step: "move",
+    durationMs: Math.round(performance.now() - moveStartedMs),
+  });
   if (moveError) {
     await safeRemove(input.quarantinePath);
     /* Redact any quarantine-path segment that a storage error message echoes. */
@@ -409,6 +425,11 @@ export async function finalizeStoredUpload(input: {
     step: "move",
     kind: input.kind,
     size: info.size,
+  });
+  logger.info("publish timing: finalize", {
+    step: "finalize",
+    kind: input.kind,
+    durationMs: Math.round(performance.now() - finalizeStartedMs),
   });
   return { ok: true, finalPath, size: info.size };
 }

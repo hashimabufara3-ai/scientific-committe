@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { buildSessionWithRole, getSessionUser } from "../../../lib/auth/authorize";
 import { createAdminClient, createClient } from "../../../lib/auth/supabase-server";
+import { logger } from "../../../lib/logger";
 import { checkRateLimit, LIMITERS } from "../../../lib/security/rate-limit";
 import { removeResource, finalizeStoredUpload } from "../../../lib/content/storage";
 import { subjectIsDuplicate } from "../../../lib/content/mock-contributor-data";
@@ -91,10 +92,15 @@ async function authorizeContributor(lang: string) {
     `resources:action:${user.id}`
   );
 
+  const authParallelStartedMs = performance.now();
   const [{ data: profile }, { success: allowed }] = await Promise.all([
     profilePromise,
     ratePromise,
   ]);
+  logger.info("publish timing: authorization parallel", {
+    step: "profile+rateLimit",
+    durationMs: Math.round(performance.now() - authParallelStartedMs),
+  });
 
   const session = buildSessionWithRole(user, profile);
 
@@ -477,15 +483,35 @@ export async function createSummaryAction(
   lang: string,
   input: CreateSummaryInput
 ): Promise<SummaryActionResult> {
+  const actionStartedMs = performance.now();
+  logger.info("publish timing: action begin", {
+    action: "createSummaryAction",
+  });
+  /* Diagnostic-only: every exit reports the action's total elapsed time. */
+  const completeLog = (ok: boolean) =>
+    logger.info("publish timing: action complete", {
+      action: "createSummaryAction",
+      ok,
+      durationMs: Math.round(performance.now() - actionStartedMs),
+    });
+
   const session = await authorizeContributor(lang);
-  if (!session) return { ok: false, errorKey: "notAllowed" };
+  if (!session) {
+    completeLog(false);
+    return { ok: false, errorKey: "notAllowed" };
+  }
 
   const title = input.title.trim();
-  if (!title) return { ok: false, errorKey: "validation" };
+  if (!title) {
+    completeLog(false);
+    return { ok: false, errorKey: "validation" };
+  }
   if (input.source === "upload" && !input.storagePath) {
+    completeLog(false);
     return { ok: false, errorKey: "uploadMissing" };
   }
   if (input.source === "content" && !input.content?.trim()) {
+    completeLog(false);
     return { ok: false, errorKey: "validation" };
   }
 
@@ -504,11 +530,15 @@ export async function createSummaryAction(
       userId: session.user.id,
       kind: "summary",
     });
-    if (!finalized.ok) return { ok: false, errorKey: "validation" };
+    if (!finalized.ok) {
+      completeLog(false);
+      return { ok: false, errorKey: "validation" };
+    }
     storedPath = finalized.finalPath;
     storedSize = finalized.size;
   }
 
+  const rpcStartedMs = performance.now();
   const { data: id, error } = await supabase.rpc("create_summary", {
     p_subject_id: input.subjectId,
     p_title: title,
@@ -520,6 +550,11 @@ export async function createSummaryAction(
     p_mime_type: input.source === "upload" ? "application/pdf" : null,
     p_file_size: input.source === "upload" ? storedSize : null,
   });
+  logger.info("publish timing: create_summary", {
+    step: "create_summary",
+    durationMs: Math.round(performance.now() - rpcStartedMs),
+    ok: !error,
+  });
 
   if (error) {
     /* Compensation: remove the finalized object so nothing is orphaned. */
@@ -530,11 +565,13 @@ export async function createSummaryAction(
         /* cleanup best-effort */
       }
     }
+    completeLog(false);
     return { ok: false, errorKey: mapRpcError(error.message) };
   }
 
   revalidateResources(lang);
   revalidatePath(`/${lang}/summaries/${input.subjectId}`);
+  completeLog(true);
   return { ok: true, id: typeof id === "string" ? id : String(id) };
 }
 
