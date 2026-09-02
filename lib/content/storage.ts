@@ -336,12 +336,20 @@ export async function readStoredObjectPrefix(
         reads: reads - 1,
       });
     }
+    /* Stream teardown is fire-and-forget: production instrumentation proved
+       `await reader.cancel()` can block the publish path for seconds. Initiate
+       cancellation without awaiting it, and swallow any rejection so an
+       unhandled-rejection is never emitted. Bounded-read behavior and the
+       maxBytes bound are unchanged. */
     const tCancel = performance.now();
-    await reader.cancel();
+    void reader.cancel().catch(() => {
+      /* best-effort teardown — never throw on the publish path */
+    });
     logger.info("prefix cancel", {
       step: "prefix",
       phase: "cancel",
       op: "cancel",
+      initiated: true,
       durationMs: Math.round(performance.now() - tCancel),
     });
   }
