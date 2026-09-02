@@ -423,6 +423,8 @@
     },
     "changePassword": {
       "title": "Change Password",
+      "showPassword": "Show password",
+      "hidePassword": "Hide password",
       "newPassword": "New Password",
       "newPasswordPlaceholder": "At least 6 characters",
       "confirmPassword": "Confirm New Password",
@@ -514,6 +516,8 @@
   },
   "auth": {
     "kicker": "Account",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "signIn": {
       "title": "Welcome back",
       "subtitle": "Sign in to your Scientific Committee account.",

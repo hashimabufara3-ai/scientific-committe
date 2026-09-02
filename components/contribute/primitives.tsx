@@ -1,11 +1,13 @@
 "use client";
 
-import type {
-  ButtonHTMLAttributes,
-  InputHTMLAttributes,
-  ReactNode,
-  TextareaHTMLAttributes,
+import {
+  useState,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type TextareaHTMLAttributes,
 } from "react";
+import { EyeIcon, EyeOffIcon } from "../icons";
 
 /* Simple {token} interpolation shared by the localized copy. */
 export function fmt(
@@ -105,6 +107,46 @@ const inputClass =
 
 export function TextInput(props: InputHTMLAttributes<HTMLInputElement>) {
   return <input {...props} className={`${inputClass} ${props.className ?? ""}`} />;
+}
+
+/* Password input with an inline show/hide toggle. Shares the visual design of
+   TextInput (only the end padding grows to make room for the icon) and respects
+   RTL/LTR via logical properties. The toggle is a real <button type="button">
+   so it stays keyboard-focusable and never submits the form. */
+export function PasswordInput({
+  showLabel,
+  hideLabel,
+  className = "",
+  ...props
+}: InputHTMLAttributes<HTMLInputElement> & {
+  showLabel: string;
+  hideLabel: string;
+}) {
+  const [visible, setVisible] = useState(false);
+
+  return (
+    <div className="relative">
+      <input
+        {...props}
+        type={visible ? "text" : "password"}
+        className={`w-full rounded-lg border border-white/10 bg-ink/60 ps-3.5 pe-11 py-2.5 text-sm text-foreground placeholder:text-muted/60 transition-colors focus:border-accent/50 focus:outline-none ${className}`}
+      />
+      <button
+        type="button"
+        aria-label={visible ? hideLabel : showLabel}
+        aria-pressed={visible}
+        aria-controls={props.id}
+        onClick={() => setVisible((v) => !v)}
+        className="absolute inset-y-0 end-0 flex w-10 items-center justify-center text-muted transition-colors hover:text-foreground focus:outline-none focus-visible:text-foreground focus-visible:ring-2 focus-visible:ring-accent/40 focus-visible:ring-inset"
+      >
+        {visible ? (
+          <EyeOffIcon className="h-4 w-4" />
+        ) : (
+          <EyeIcon className="h-4 w-4" />
+        )}
+      </button>
+    </div>
+  );
 }
 
 export function TextArea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {

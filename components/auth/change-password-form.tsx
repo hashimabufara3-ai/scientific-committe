@@ -3,7 +3,11 @@
 import { useEffect } from "react";
 import { useActionState } from "react";
 import { forceChangePassword } from "../../lib/auth/actions";
-import { Field, PrimaryButton, TextInput } from "../contribute/primitives";
+import {
+  Field,
+  PasswordInput,
+  PrimaryButton,
+} from "../contribute/primitives";
 import { AuthAlert } from "./auth-shell";
 import type { DictionaryData } from "../../app/[lang]/dictionaries";
 
@@ -33,12 +37,13 @@ export function ChangePasswordForm({
       <form action={formAction} noValidate className="space-y-5">
         <input type="hidden" name="lang" value={lang} />
         <Field label={dict.changePassword.newPassword} htmlFor="new-password" required>
-          <TextInput
+          <PasswordInput
             id="new-password"
             name="password"
-            type="password"
             autoComplete="new-password"
             placeholder={dict.changePassword.newPasswordPlaceholder}
+            showLabel={dict.showPassword}
+            hideLabel={dict.hidePassword}
           />
         </Field>
         <Field
@@ -46,12 +51,13 @@ export function ChangePasswordForm({
           htmlFor="confirm-password"
           required
         >
-          <TextInput
+          <PasswordInput
             id="confirm-password"
             name="confirmPassword"
-            type="password"
             autoComplete="new-password"
             placeholder={dict.changePassword.confirmPasswordPlaceholder}
+            showLabel={dict.showPassword}
+            hideLabel={dict.hidePassword}
           />
         </Field>
         <PrimaryButton type="submit" disabled={pending} className="w-full">

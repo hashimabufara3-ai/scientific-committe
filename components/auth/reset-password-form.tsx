@@ -2,7 +2,11 @@
 
 import { useActionState, useState, type FormEvent } from "react";
 import { updatePassword } from "../../lib/auth/actions";
-import { Field, PrimaryButton, TextInput } from "../contribute/primitives";
+import {
+  Field,
+  PasswordInput,
+  PrimaryButton,
+} from "../contribute/primitives";
 import { AuthAlert } from "./auth-shell";
 import type { DictionaryData } from "../../app/[lang]/dictionaries";
 
@@ -47,12 +51,13 @@ export function ResetPasswordForm({
       >
         <input type="hidden" name="lang" value={lang} />
         <Field label={dict.reset.password} htmlFor="password" required>
-          <TextInput
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             autoComplete="new-password"
             placeholder={dict.reset.passwordPlaceholder}
+            showLabel={dict.showPassword}
+            hideLabel={dict.hidePassword}
           />
         </Field>
         <Field
@@ -60,12 +65,13 @@ export function ResetPasswordForm({
           htmlFor="confirmPassword"
           required
         >
-          <TextInput
+          <PasswordInput
             id="confirmPassword"
             name="confirmPassword"
-            type="password"
             autoComplete="new-password"
             placeholder={dict.reset.confirmPasswordPlaceholder}
+            showLabel={dict.showPassword}
+            hideLabel={dict.hidePassword}
           />
         </Field>
         <PrimaryButton type="submit" disabled={pending} className="w-full">

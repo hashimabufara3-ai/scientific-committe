@@ -422,6 +422,8 @@
     },
     "changePassword": {
       "title": "تغيير كلمة المرور",
+      "showPassword": "إظهار كلمة المرور",
+      "hidePassword": "إخفاء كلمة المرور",
       "newPassword": "كلمة المرور الجديدة",
       "newPasswordPlaceholder": "6 أحرف على الأقل",
       "confirmPassword": "تأكيد كلمة المرور الجديدة",
@@ -512,6 +514,8 @@
   },
   "auth": {
     "kicker": "الحساب",
+    "showPassword": "إظهار كلمة المرور",
+    "hidePassword": "إخفاء كلمة المرور",
     "signIn": {
       "title": "مرحباً بعودتك",
       "subtitle": "سجّل الدخول إلى حسابك في اللجنة العلمية.",

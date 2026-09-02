@@ -14,6 +14,7 @@ import {
   AccentChip,
   Chip,
   Panel,
+  PasswordInput,
   PrimaryButton,
   SmallButton,
   TextInput,
@@ -265,14 +266,15 @@ function MemberRow({
                     >
                       {t.changePassword.newPassword}
                     </label>
-                    <TextInput
+                    <PasswordInput
                       id={`new-pw-${member.id}`}
                       name="password"
-                      type="password"
                       autoComplete="new-password"
                       minLength={6}
                       required
                       placeholder={t.changePassword.newPasswordPlaceholder}
+                      showLabel={t.changePassword.showPassword}
+                      hideLabel={t.changePassword.hidePassword}
                     />
                   </div>
                   <div>
@@ -282,14 +284,15 @@ function MemberRow({
                     >
                       {t.changePassword.confirmPassword}
                     </label>
-                    <TextInput
+                    <PasswordInput
                       id={`confirm-pw-${member.id}`}
                       name="confirmPassword"
-                      type="password"
                       autoComplete="new-password"
                       minLength={6}
                       required
                       placeholder={t.changePassword.confirmPasswordPlaceholder}
+                      showLabel={t.changePassword.showPassword}
+                      hideLabel={t.changePassword.hidePassword}
                     />
                   </div>
                 </div>

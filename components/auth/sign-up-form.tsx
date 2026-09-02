@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { useActionState, useEffect, useState, type FormEvent } from "react";
 import { signUp, checkUsernameAvailability } from "../../lib/auth/actions";
-import { Field, PrimaryButton, TextInput } from "../contribute/primitives";
+import {
+  Field,
+  PasswordInput,
+  PrimaryButton,
+  TextInput,
+} from "../contribute/primitives";
 import { AuthAlert } from "./auth-shell";
 import {
   isReservedUsername,
@@ -176,12 +181,13 @@ export function SignUpForm({
           />
         </Field>
         <Field label={dict.signUp.password} htmlFor="password" required>
-          <TextInput
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             autoComplete="new-password"
             placeholder={dict.signUp.passwordPlaceholder}
+            showLabel={dict.showPassword}
+            hideLabel={dict.hidePassword}
           />
         </Field>
         <Field
@@ -189,12 +195,13 @@ export function SignUpForm({
           htmlFor="confirmPassword"
           required
         >
-          <TextInput
+          <PasswordInput
             id="confirmPassword"
             name="confirmPassword"
-            type="password"
             autoComplete="new-password"
             placeholder={dict.signUp.confirmPasswordPlaceholder}
+            showLabel={dict.showPassword}
+            hideLabel={dict.hidePassword}
           />
         </Field>
         <PrimaryButton type="submit" disabled={pending} className="w-full">

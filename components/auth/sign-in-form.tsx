@@ -4,7 +4,12 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { useActionState } from "react";
 import { signIn } from "../../lib/auth/actions";
-import { Field, PrimaryButton, TextInput } from "../contribute/primitives";
+import {
+  Field,
+  PasswordInput,
+  PrimaryButton,
+  TextInput,
+} from "../contribute/primitives";
 import { AuthAlert } from "./auth-shell";
 import type { DictionaryData } from "../../app/[lang]/dictionaries";
 
@@ -56,12 +61,13 @@ export function SignInForm({
           />
         </Field>
         <Field label={dict.signIn.password} htmlFor="password" required>
-          <TextInput
+          <PasswordInput
             id="password"
             name="password"
-            type="password"
             autoComplete="current-password"
             placeholder={dict.signIn.passwordPlaceholder}
+            showLabel={dict.showPassword}
+            hideLabel={dict.hidePassword}
           />
         </Field>
         <div className="flex justify-end">
