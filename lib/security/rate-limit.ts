@@ -21,6 +21,7 @@
 import { Ratelimit, type Duration } from "@upstash/ratelimit";
 import { Redis } from "@upstash/redis";
 import { logger } from "../logger";
+import { captureActionError } from "./sentry";
 
 /* ---------------------------------------------------------------------------
    Redis client singleton
@@ -190,6 +191,16 @@ export async function checkRateLimit(
     logger.warn("rate-limit Upstash unavailable, failing open", {
       err: err instanceof Error ? err.message : String(err),
     });
+    /* Report the degradation to Sentry so we know Rate Limiting protection
+       is impaired, while preserving fail-open behavior exactly as before.
+       Only a fixed safe message and fixed non-sensitive metadata are sent:
+       no IP, email, username, password, tokens, cookies, session data,
+       request data, or Upstash/Redis keys and raw error text. */
+    captureActionError(
+      err,
+      "rate-limit Upstash unavailable",
+      { action: "rateLimit", route: "rate-limit" }
+    );
     return { success: true };
   }
 }
