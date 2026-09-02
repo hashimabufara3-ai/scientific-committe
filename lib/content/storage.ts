@@ -246,6 +246,7 @@ export async function readStoredObjectPrefix(
      no per-segment encoding (the quarantine path is server-generated ASCII). */
   const objectKey = `${RESOURCES_BUCKET}/${path}`;
   let res: Response;
+  const tFetch = performance.now();
   try {
     res = await fetch(`${base}/object/${objectKey}`, {
       headers: {
@@ -255,6 +256,13 @@ export async function readStoredObjectPrefix(
       cache: "no-store",
     });
   } catch (err) {
+    logger.info("prefix fetch done", {
+      step: "prefix",
+      phase: "fetch",
+      op: "fetch",
+      durationMs: Math.round(performance.now() - tFetch),
+      ok: false,
+    });
     /* Diagnostic only — same null return as before. */
     logger.warn("finalize: storage range-read transport failed", {
       step: "range-read",
@@ -262,6 +270,14 @@ export async function readStoredObjectPrefix(
     });
     return null;
   }
+  logger.info("prefix fetch done", {
+    step: "prefix",
+    phase: "fetch",
+    op: "fetch",
+    durationMs: Math.round(performance.now() - tFetch),
+    ok: res.ok,
+    status: typeof res.status === "number" ? res.status : undefined,
+  });
   if (!res.ok || !res.body) {
     /* Diagnostic only — same null return as before. */
     logger.warn("finalize: storage range-read rejected", {
@@ -275,16 +291,59 @@ export async function readStoredObjectPrefix(
   const reader = res.body.getReader();
   const out = new Uint8Array(maxBytes);
   let filled = 0;
+  let reads = 0;
+  let firstReadMs: number | null = null;
+  let subsequentMs = 0;
   try {
     while (filled < maxBytes) {
+      const tRead = performance.now();
       const { done, value } = await reader.read();
-      if (done) break;
+      const readMs = Math.round(performance.now() - tRead);
+      if (reads === 0) {
+        firstReadMs = readMs;
+      } else {
+        subsequentMs += readMs;
+      }
+      reads += 1;
+      if (done) {
+        logger.info("prefix read done", {
+          step: "prefix",
+          phase: "read",
+          op: "read",
+          done: true,
+          reads,
+        });
+        break;
+      }
       const take = Math.min(value.byteLength, maxBytes - filled);
       out.set(value.subarray(0, take), filled);
       filled += take;
     }
   } finally {
+    logger.info("prefix first read", {
+      step: "prefix",
+      phase: "read",
+      op: "firstRead",
+      durationMs: firstReadMs,
+      reads,
+    });
+    if (reads > 1) {
+      logger.info("prefix subsequent reads", {
+        step: "prefix",
+        phase: "read",
+        op: "subsequent",
+        durationMs: subsequentMs,
+        reads: reads - 1,
+      });
+    }
+    const tCancel = performance.now();
     await reader.cancel();
+    logger.info("prefix cancel", {
+      step: "prefix",
+      phase: "cancel",
+      op: "cancel",
+      durationMs: Math.round(performance.now() - tCancel),
+    });
   }
   return filled > 0 ? out.subarray(0, filled) : null;
 }
