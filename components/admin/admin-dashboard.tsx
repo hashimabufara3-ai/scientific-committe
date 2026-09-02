@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import {
   setRoleAction,
@@ -113,6 +113,18 @@ function MemberRow({
   );
   const [confirming, setConfirming] = useState(false);
   const [passwordEditing, setPasswordEditing] = useState(false);
+
+  /* Close the Change Password form once the password change succeeds. On
+     success the server action returns { ok: true }, which updates
+     passwordState; the form (fields, submit and Cancel buttons) must not
+     remain open under the success message. On failure ok stays false, so the
+     form stays open for the admin to correct the input and retry. Cancel is
+     unaffected — it still sets passwordEditing(false) directly. */
+  useEffect(() => {
+    if (passwordState.ok) {
+      setPasswordEditing(false);
+    }
+  }, [passwordState.ok]);
 
   const isSelf = member.id === currentUserId;
   const transitions = ROLES.filter((role) =>
@@ -232,6 +244,11 @@ function MemberRow({
 
       {canResetPw && (
         <div className="mt-4 border-t border-white/5 pt-4">
+          {passwordState.ok && (
+            <p role="status" className="mb-3 text-xs text-accent">
+              {t.changePassword.success}
+            </p>
+          )}
           {passwordEditing ? (
             <div className="space-y-3">
               <p className="text-sm font-semibold text-foreground">
@@ -279,11 +296,6 @@ function MemberRow({
                 {passwordError && (
                   <p role="alert" className="text-xs text-red-300">
                     {passwordError}
-                  </p>
-                )}
-                {passwordState.ok && (
-                  <p role="status" className="text-xs text-accent">
-                    {t.changePassword.success}
                   </p>
                 )}
                 <div className="flex flex-wrap gap-2">
