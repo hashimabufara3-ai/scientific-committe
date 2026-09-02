@@ -148,7 +148,13 @@ export async function getSubjects(): Promise<MockSubject[]> {
     if (target) target.exams.push(rowToExam(e));
   }
 
-  return [...bySubject.values()];
+  /* A subject is visible on the catalog only while it retains at least one
+     active resource: active summaries > 0 OR active exams > 0. Subjects with
+     neither are filtered out (soft-deleted children left the subject empty);
+     the subject row itself is never deleted. */
+  return [...bySubject.values()].filter(
+    (s) => s.summaries.length > 0 || s.exams.length > 0
+  );
 }
 
 /* Fetch one active subject (metadata only) with its active summaries/exams,
