@@ -175,7 +175,7 @@ function RowActions({
           aria-label={t.actions.edit}
         >
           <PencilIcon className="h-3.5 w-3.5" />
-          <span className="hidden sm:inline">{t.actions.edit}</span>
+          <span>{t.actions.edit}</span>
         </GhostButton>
       )}
       <GhostButton
@@ -187,7 +187,7 @@ function RowActions({
         aria-label={t.actions.delete}
       >
         <TrashIcon className="h-3.5 w-3.5" />
-        <span className="hidden sm:inline">{t.actions.delete}</span>
+        <span>{t.actions.delete}</span>
       </GhostButton>
     </div>
   );
