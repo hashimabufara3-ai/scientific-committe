@@ -384,7 +384,7 @@ function SubjectCard({ subject, api }: { subject: MockSubject; api: Api }) {
             {countPhrase(counts.videos, "video", t)} ·{" "}
             {countPhrase(counts.exams, "exam", t)}
           </span>
-          <span className="inline-flex items-center gap-1.5 text-sm font-medium text-accent">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3.5 py-1.5 text-xs font-semibold text-accent shadow-[0_0_20px_rgba(45,212,191,0.15)] transition-colors hover:border-accent/60 hover:bg-accent/20 motion-safe:active:scale-[0.97]">
             {t.open}
             <ArrowRightIcon className="h-4 w-4 rtl-flip" />
           </span>
