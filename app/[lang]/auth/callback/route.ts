@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { createClient } from "../../../../lib/auth/supabase-server";
+import { captureActionError } from "../../../../lib/security/sentry";
 
 function resolveDestination(
   next: string | null,
@@ -43,6 +44,14 @@ export async function GET(
     if (!error) {
       return NextResponse.redirect(`${origin}${fallback}`);
     }
+    /* Unexpected failure exchanging the auth code for a session. Only the
+       safe error code and a fixed label are captured — never the code,
+       tokens, query params, cookies, or request body. */
+    captureActionError(error, "auth callback exchangeCodeForSession failed", {
+      action: "authCallback",
+      route: `/${lang}/auth/callback`,
+      code: error.code,
+    });
     return NextResponse.redirect(
       `${origin}/${lang}/auth/sign-in?error=invalid-link`
     );
@@ -93,6 +102,15 @@ export async function POST(
   if (!error) {
     return NextResponse.redirect(`${origin}${fallback}`);
   }
+
+  /* Unexpected failure verifying the OTP token. Only the safe error code and
+     a fixed label are captured — never the token, query params, cookies, or
+     request body. */
+  captureActionError(error, "auth callback verifyOtp failed", {
+    action: "authCallback",
+    route: `/${lang}/auth/callback`,
+    code: error.code,
+  });
 
   return NextResponse.redirect(
     `${origin}/${lang}/auth/sign-in?error=invalid-link`

@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import type { User } from "@supabase/supabase-js";
 import { isRole, type Role } from "../../lib/auth/roles";
+import { captureBoundaryError } from "../../lib/security/sentry";
 
 /* Reactive current-user state for the navbar. Validates the session with
    getUser() once on mount, then stays in sync with onAuthStateChange.
@@ -27,8 +28,15 @@ export function useUser() {
             setUser(data.user);
             setLoading(false);
           })
-          .catch(() => {
+          .catch((err) => {
+            /* Unexpected session-load failure. Keep the graceful "logged-out"
+               UI; only the error boundary capture is sent (safe context only —
+               never the session object, tokens, cookies, or identity). */
             if (active) {
+              captureBoundaryError(err, {
+                component: "use-auth",
+                action: "getUser",
+              });
               setUser(null);
               setLoading(false);
             }
@@ -43,8 +51,12 @@ export function useUser() {
         );
         unsubscribe = subscription.subscription.unsubscribe;
       })
-      .catch(() => {
+      .catch((err) => {
         if (active) {
+          captureBoundaryError(err, {
+            component: "use-auth",
+            action: "createClient",
+          });
           setUser(null);
           setLoading(false);
         }
@@ -89,8 +101,17 @@ export function useRole(userId: string | null) {
           role: isRole(data?.role) ? data.role : null,
         });
       })
-      .catch(() => {
-        if (active) setState({ userId, role: null });
+      .catch((err) => {
+        /* Unexpected profile/role lookup failure. Keep the graceful null-role
+           UI; capture only the boundary error (safe context — never user
+           metadata, identity, session, tokens, or cookies). */
+        if (active) {
+          captureBoundaryError(err, {
+            component: "use-auth",
+            action: "loadRole",
+          });
+          setState({ userId, role: null });
+        }
       });
 
     return () => {

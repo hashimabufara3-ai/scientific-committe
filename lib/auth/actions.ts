@@ -120,6 +120,40 @@ function mapAuthError(
 
 type DictionaryAuthErrors = Awaited<ReturnType<typeof getDictionary>>["auth"]["errors"];
 
+/* Classify a Supabase Auth error as an EXPECTED, user-facing authentication
+   rejection (wrong password, unconfirmed email, rate limit, invalid/expired
+   link, signups disabled, …). Expected rejections must never create a Sentry
+   event per attempt; everything else (network / provider / system / unknown)
+   is an unexpected auth-system failure that observability SHOULD capture.
+
+   Mirrors the exact cases mapAuthError already recognizes, so the capture
+   decision and the localized user-facing classification can never diverge. */
+function isExpectedAuthRejection(error: AuthError): boolean {
+  const message = (error.message ?? "").toLowerCase();
+  if (message.includes("invalid login credentials")) return true;
+  if (message.includes("email not confirmed")) return true;
+  if (
+    message.includes("already registered") ||
+    message.includes("already exists")
+  )
+    return true;
+  if (message.includes("at least 6 characters")) return true;
+  if (message.includes("security purposes")) return true;
+  if (
+    error.code === "over_email_send_rate_limit" ||
+    message.includes("rate limit")
+  )
+    return true;
+  if (message.includes("signups not allowed")) return true;
+  if (
+    message.includes("token has expired") ||
+    message.includes("invalid token") ||
+    message.includes("invalid code")
+  )
+    return true;
+  return false;
+}
+
 export async function signIn(
   _prev: AuthState,
   formData: FormData
@@ -180,7 +214,24 @@ export async function signIn(
     email: authEmail,
     password,
   });
-  if (error) return { error: mapAuthError(error, errors) };
+  if (error) {
+    /* Capture ONLY unexpected system/provider/network failures. Expected
+       authentication rejections (invalid credentials, unconfirmed email,
+       rate limits, invalid tokens, signups disabled) are user-facing and
+       intentionally silent — do not create a Sentry event per attempt. */
+    if (!isExpectedAuthRejection(error)) {
+      captureActionError(
+        error,
+        "supabase.auth.signInWithPassword failed",
+        {
+          action: "signIn",
+          route: `/${lang}/auth/sign-in`,
+          code: error.code,
+        }
+      );
+    }
+    return { error: mapAuthError(error, errors) };
+  }
 
   return { success: true, value: next };
 }
@@ -297,7 +348,22 @@ export async function updatePassword(
   }
 
   const { error } = await supabase.auth.updateUser({ password });
-  if (error) return { error: mapAuthError(error, errors) };
+  if (error) {
+    /* Unexpected auth-system failure in the password-update path. Expected
+       auth rejections remain user-facing and silent. */
+    if (!isExpectedAuthRejection(error)) {
+      captureActionError(
+        error,
+        "supabase.auth.updateUser password change failed",
+        {
+          action: "updatePassword",
+          route: `/${lang}/auth/reset-password`,
+          code: error.code,
+        }
+      );
+    }
+    return { error: mapAuthError(error, errors) };
+  }
 
   // Discard the recovery session and require a fresh sign-in.
   await supabase.auth.signOut();
@@ -460,7 +526,22 @@ export async function forceChangePassword(
 
   /* Update password */
   const { error: pwError } = await supabase.auth.updateUser({ password });
-  if (pwError) return { error: mapAuthError(pwError, errors) };
+  if (pwError) {
+    /* Unexpected auth-system failure in the forced password-change path.
+       Expected auth rejections remain user-facing and silent. */
+    if (!isExpectedAuthRejection(pwError)) {
+      captureActionError(
+        pwError,
+        "supabase.auth.updateUser forced password change failed",
+        {
+          action: "forceChangePassword",
+          route: `/${lang}/auth/change-password`,
+          code: pwError.code,
+        }
+      );
+    }
+    return { error: mapAuthError(pwError, errors) };
+  }
 
   /* Clear must_change_password flag via SECURITY DEFINER function.
      The RLS "update own profile" policy restricts column changes, so we
