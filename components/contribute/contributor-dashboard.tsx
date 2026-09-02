@@ -645,6 +645,27 @@ setEditing(null);
           return;
         }
       }
+
+      /* A summary/exam delete may be the last active resource of the open
+         subject: once the subject has no active summaries and no active exams
+         it disappears from the refreshed catalog. The delete has already
+         committed server-side, so the pre-refresh local catalog is
+         authoritative for the post-delete state — drop the deleted row and
+         check the remaining active counts. If nothing remains, return to the
+         dashboard instead of leaving the workspace on a subject that no
+         longer exists (which would render a blank/transitional screen). */
+      if (target.kind !== "subject") {
+        const subject = subjects.find((s) => s.id === target.subjectId);
+        const remainingSummaries =
+          subject?.summaries.filter((s) => s.id !== target.id).length ?? 0;
+        const remainingExams =
+          subject?.exams.filter((e) => e.id !== target.id).length ?? 0;
+        if (view.name === "subject" && view.subjectId === target.subjectId) {
+          if (remainingSummaries === 0 && remainingExams === 0) {
+            setView({ name: "dashboard" });
+          }
+        }
+      }
       router.refresh();
       pushActivity("delete", target.name);
       showToast(t.toast.deleted);
@@ -652,7 +673,7 @@ setEditing(null);
     } finally {
       end();
     }
-  }, [begin, deleteTarget, end, errorText, lang, pushActivity, router, showToast, t, view]);
+  }, [begin, deleteTarget, end, errorText, lang, pushActivity, router, showToast, subjects, t, view]);
 
   /* ---- View navigation --------------------------------------------------- */
 
