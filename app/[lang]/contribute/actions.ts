@@ -185,39 +185,6 @@ async function findActiveDuplicateSubject(
 
 /* ---- Subjects ------------------------------------------------------------ */
 
-export async function createSubjectAction(
-  lang: string,
-  title: string,
-  titleAr?: string
-): Promise<SubjectActionResult> {
-  const session = await authorizeContributor(lang);
-  if (!session) return { ok: false, errorKey: "notAllowed" };
-
-  const trimmed = title.trim();
-  const trimmedAr = (titleAr ?? "").trim();
-  if (!trimmed || !trimmedAr) return { ok: false, errorKey: "validation" };
-
-  const supabase = await createClient();
-  const duplicateCheck = await findActiveDuplicateSubject(trimmed);
-  if (duplicateCheck === "duplicate") {
-    return { ok: false, errorKey: "duplicate" };
-  }
-  if (duplicateCheck === "error") {
-    /* A DB/query failure must surface as a real internal error, not a false
-       "duplicate" — and not silently allow a duplicate. */
-    return { ok: false, errorKey: "generic" };
-  }
-
-  const { data: id, error } = await supabase.rpc("create_subject", {
-    p_title: trimmed,
-    p_title_ar: trimmedAr,
-  });
-  if (error) return { ok: false, errorKey: mapRpcError(error.message) };
-
-  revalidateResources(lang);
-  return { ok: true, id: typeof id === "string" ? id : String(id) };
-}
-
 export type CreateNewMaterialInput = {
   /* New material localized names (the subject): English and Arabic, both
      required. Never stored as one field. */
