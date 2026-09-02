@@ -34,6 +34,7 @@ import type {
   SubjectFormValues,
   SubjectRef,
   SummaryFormValues,
+  UploadPhase,
   View,
 } from "./types";
 import { SparkIcon } from "../icons";
@@ -100,9 +101,7 @@ export default function ContributorDashboard({
   /* Current upload sub-step, surfaced to the contributor:
      preparing (requesting authorization) → uploading (direct to Storage) →
      finalizing (server validating + finalizing the stored object). */
-  const [uploadPhase, setUploadPhase] = useState<
-    "preparing" | "uploading" | "finalizing" | null
-  >(null);
+  const [uploadPhase, setUploadPhase] = useState<UploadPhase>(null);
   const busyRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /* IDs of subjects whose delete Server Action already succeeded, but whose
@@ -686,6 +685,7 @@ setEditing(null);
     t,
     currentUserId,
     busy,
+    uploadPhase,
     now,
     view,
     /* Locally drop subjects whose delete already succeeded so the card

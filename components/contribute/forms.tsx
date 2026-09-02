@@ -14,7 +14,18 @@ import type {
   SubjectFormValues,
   SubjectRef,
   SummaryFormValues,
+  UploadPhase,
 } from "./types";
+
+/* Phase-aware busy label for the submit button. During a direct-to-Storage
+   file upload the existing upload phases are surfaced verbatim; otherwise a
+   generic "Publishing…" is shown. No fake progress/percentage. */
+function busyLabelFor(phase: UploadPhase | undefined, t: ContributeDict): string {
+  if (phase === "preparing") return t.forms.uploadPreparing;
+  if (phase === "uploading") return t.forms.uploading;
+  if (phase === "finalizing") return t.forms.uploadFinalizing;
+  return t.forms.publishing;
+}
 
 /* Shared shell: a compact panel with the fields and a cancel + primary
    action row. Keeps every creation flow short — one visible section. */
@@ -29,9 +40,11 @@ type FormShellProps = {
   /* True while an upload/action is running — disables submit (in addition to
      the dashboard-level guard) so a form cannot be double-submitted. */
   busy?: boolean;
+  /* Label + spinner shown inside the submit button while busy. */
+  busyLabel?: string;
 };
 
-function FormShell({ t, canSubmit, submitLabel, onCancel, children, hint, busy }: FormShellProps) {
+function FormShell({ t, canSubmit, submitLabel, onCancel, children, hint, busy, busyLabel }: FormShellProps) {
   return (
     <Panel className="p-5">
       <div className="space-y-4">{children}</div>
@@ -39,8 +52,22 @@ function FormShell({ t, canSubmit, submitLabel, onCancel, children, hint, busy }
         <p className="text-xs text-muted">{hint ?? ""}</p>
         <div className="flex items-center gap-2">
           <GhostButton onClick={onCancel} disabled={busy}>{t.actions.cancel}</GhostButton>
-          <PrimaryButton type="submit" disabled={!canSubmit || busy}>
-            {submitLabel}
+          <PrimaryButton
+            type="submit"
+            disabled={!canSubmit || busy}
+            className={busy ? "!opacity-100" : undefined}
+          >
+            {busy ? (
+              <>
+                <span
+                  aria-hidden="true"
+                  className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-ink/30 border-t-ink motion-reduce:animate-none"
+                />
+                <span>{busyLabel ?? submitLabel}</span>
+              </>
+            ) : (
+              submitLabel
+            )}
           </PrimaryButton>
         </div>
       </div>
@@ -164,6 +191,7 @@ export function SubjectForm({
   onSubmit,
   onCancel,
   busy,
+  phase,
 }: {
   t: ContributeDict;
   initial?: Partial<SubjectFormValues>;
@@ -171,6 +199,7 @@ export function SubjectForm({
   onSubmit: (values: SubjectFormValues) => void;
   onCancel: () => void;
   busy?: boolean;
+  phase?: UploadPhase;
 }) {
   const [title, setTitle] = useState(initial?.title ?? "");
   const [titleAr, setTitleAr] = useState(initial?.titleAr ?? "");
@@ -197,6 +226,7 @@ export function SubjectForm({
         onCancel={onCancel}
         hint={t.trustChip}
         busy={busy}
+        busyLabel={busyLabelFor(phase, t)}
       >
         <Field label={t.forms.subjectNameEn} required htmlFor={nameId}>
           <TextInput
@@ -258,6 +288,7 @@ export function SummaryForm({
   onSubmit,
   onCancel,
   busy,
+  phase,
 }: {
   t: ContributeDict;
   lang: string;
@@ -272,6 +303,7 @@ export function SummaryForm({
   onSubmit: (subjectRef: SubjectRef, values: SummaryFormValues) => void;
   onCancel: () => void;
   busy?: boolean;
+  phase?: UploadPhase;
 }) {
   const isEditing = Boolean(initial);
   const fixedSubject = fixedSubjectId
@@ -417,6 +449,7 @@ export function SummaryForm({
         onCancel={onCancel}
         hint={t.forms.summaryHint}
         busy={busy}
+        busyLabel={busyLabelFor(phase, t)}
       >
         {/* Subject — fixed when opened from a subject workspace: rendered as
             read-only context, never as a picker. Otherwise the contributor
@@ -796,6 +829,7 @@ export function ExamForm({
   onSubmit,
   onCancel,
   busy,
+  phase,
 }: {
   t: ContributeDict;
   initial?: Partial<ExamFormValues>;
@@ -803,6 +837,7 @@ export function ExamForm({
   onSubmit: (values: ExamFormValues) => void;
   onCancel: () => void;
   busy?: boolean;
+  phase?: UploadPhase;
 }) {
   const isEditing = Boolean(initial);
   const [type, setType] = useState<ExamType>(initial?.type ?? "midterm");
@@ -863,6 +898,7 @@ export function ExamForm({
         onCancel={onCancel}
         hint={t.forms.examHint}
         busy={busy}
+        busyLabel={busyLabelFor(phase, t)}
       >
         {/* Type — midterm or final */}
         <fieldset>

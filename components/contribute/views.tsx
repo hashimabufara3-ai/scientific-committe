@@ -49,6 +49,7 @@ import type {
   SubjectFormValues,
   SubjectRef,
   SummaryFormValues,
+  UploadPhase,
   View,
 } from "./types";
 
@@ -63,6 +64,8 @@ export type Api = {
   currentUserId: string;
   /* True while an upload / server action is running (disables submits). */
   busy: boolean;
+  /* Current upload phase (null when there is no file upload in flight). */
+  uploadPhase: UploadPhase | null;
   now: number;
   view: View;
   subjects: MockSubject[];
@@ -467,6 +470,7 @@ function DashboardView({ api }: { api: Api }) {
             onSubmit={api.onCreateSummary}
             onCancel={() => api.onToggleForm(null)}
             busy={api.busy}
+            phase={api.uploadPhase}
           />
         </div>
       )}
@@ -622,6 +626,7 @@ function SummaryEditInline({
         }
         onCancel={api.onCancelEdit}
         busy={api.busy}
+        phase={api.uploadPhase}
       />
     </div>
   );
@@ -668,6 +673,7 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
             onSubmit={(values) => api.onSaveSubject(subject.id, values)}
             onCancel={api.onCancelEdit}
             busy={api.busy}
+            phase={api.uploadPhase}
           />
         </div>
       )}
@@ -705,6 +711,7 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
             onSubmit={api.onCreateSummary}
             onCancel={() => api.onToggleForm(null)}
             busy={api.busy}
+            phase={api.uploadPhase}
           />
         </div>
       )}
@@ -717,6 +724,7 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
             onSubmit={(values) => api.onCreateExam(subject.id, values)}
             onCancel={() => api.onToggleForm(null)}
             busy={api.busy}
+            phase={api.uploadPhase}
           />
         </div>
       )}
@@ -920,6 +928,7 @@ function ExamRow({
             onSubmit={(values) => api.onSaveExam(subjectId, exam.id, values)}
             onCancel={api.onCancelEdit}
             busy={api.busy}
+            phase={api.uploadPhase}
           />
         </div>
       )}

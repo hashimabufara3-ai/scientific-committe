@@ -3,6 +3,10 @@ import type { ExamType, Semester } from "@/lib/content/mock-contributor-data";
 
 export type ContributeDict = Awaited<ReturnType<Dictionary>>["contributePage"];
 
+/* Phase of a direct-to-Storage file upload (drives the busy indicator text).
+   null = not uploading (e.g. inline content publish). */
+export type UploadPhase = "preparing" | "uploading" | "finalizing" | null;
+
 /* Which screen the contributor is looking at. Pure client-side navigation —
    no URL routing, no persistence, matching the in-memory prototype. */
 export type View =

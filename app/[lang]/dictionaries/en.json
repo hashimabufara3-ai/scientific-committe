@@ -244,6 +244,7 @@
       "uploadPreparing": "Preparing upload…",
       "uploading": "Uploading…",
       "uploadFinalizing": "Finalizing…",
+      "publishing": "Publishing…",
       "fileReadError": "That file could not be read — please try another one.",
       "examType": "Exam type",
       "examFile": "Exam file",
