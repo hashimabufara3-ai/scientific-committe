@@ -25,6 +25,7 @@ import type {
 } from "@/app/[lang]/contribute/actions";
 import { ContributeView } from "./views";
 import type { Api } from "./views";
+import type { Role } from "@/lib/auth/roles";
 import type {
   ContributeDict,
   DeleteTarget,
@@ -79,11 +80,13 @@ export default function ContributorDashboard({
   lang,
   t,
   currentUserId,
+  currentRole,
   subjects,
 }: {
   lang: string;
   t: ContributeDict;
   currentUserId: string;
+  currentRole: Role;
   subjects: MockSubject[];
 }) {
   const router = useRouter();
@@ -599,10 +602,14 @@ setEditing(null);
         setDeleteTarget(null);
         return;
       }
-      if (ownerOf(target) !== currentUserId) return;
+      /* Contributors may only delete rows they own; admins/owners may delete
+         any contributor's rows (the server RPC is the authoritative gate). */
+      if (ownerOf(target) !== currentUserId) {
+        if (currentRole !== "admin" && currentRole !== "owner") return;
+      }
       setDeleteTarget(target);
     },
-    [ownerOf, currentUserId]
+    [ownerOf, currentUserId, currentRole]
   );
 
   const onConfirmDelete = useCallback(async () => {
@@ -705,6 +712,7 @@ setEditing(null);
     lang,
     t,
     currentUserId,
+    currentRole,
     busy,
     uploadPhase,
     now,

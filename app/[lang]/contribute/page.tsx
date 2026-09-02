@@ -29,7 +29,7 @@ export default async function ContributePage({
 
   // Server-side gate: only contributor, admin and owner may enter the
   // workspace. Students are redirected; navigation alone is never trusted.
-  const { user } = await requireRole(lang, "contributor");
+  const { user, role } = await requireRole(lang, "contributor");
 
   // Active catalog rows (metadata only) straight from the database — the store
   // (localStorage prototype) is no longer read on the production path.
@@ -42,6 +42,7 @@ export default async function ContributePage({
           lang={lang}
           t={dict.contributePage}
           currentUserId={user.id}
+          currentRole={role}
           subjects={subjects}
         />
       </div>

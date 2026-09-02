@@ -15,6 +15,7 @@ import type {
   MockSubject,
   MockSummary,
 } from "@/lib/content/mock-contributor-data";
+import type { Role } from "@/lib/auth/roles";
 import {
   ArrowRightIcon,
   BookIcon,
@@ -62,6 +63,10 @@ export type Api = {
   /* The authenticated, server-resolved id of the signed-in contributor. Used
      for ownership gating instead of the mock "me" constant. */
   currentUserId: string;
+  /* The authenticated user's role (contributor/admin/owner). Admins and
+     owners may manage any contributor's content; contributors manage their
+     own only. The server/RPC layer remains the authoritative gate. */
+  currentRole: Role;
   /* True while an upload / server action is running (disables submits). */
   busy: boolean;
   /* Current upload phase (null when there is no file upload in flight). */
@@ -138,6 +143,17 @@ function isOwned(authorId: string | undefined, currentUserId: string): boolean {
   return Boolean(authorId && authorId === currentUserId);
 }
 
+/* Whether the current actor may edit/delete a given row. Contributors manage
+   only their own rows; admins and owners may manage any contributor's rows.
+   This is a UI capability alignment — the server RPCs are the authoritative
+   security layer and enforce the same rules independently. */
+function canManage(
+  owned: boolean,
+  currentRole: Role
+): boolean {
+  return owned || currentRole === "admin" || currentRole === "owner";
+}
+
 function ownerName(
   authorId: string,
   lang: string,
@@ -149,20 +165,23 @@ function ownerName(
     : authorName(authorId, lang as "en" | "ar");
 }
 
-/* Edit / delete for content the current contributor owns. stopPropagation is
-   handled here so these can sit inside clickable cards. */
+/* Edit / delete for content the current contributor owns (or admin/owner may
+   manage any contributor's content). stopPropagation is handled here so these
+   can sit inside clickable cards. */
 function RowActions({
   owned,
+  currentRole,
   onEdit,
   onDelete,
   t,
 }: {
   owned: boolean;
+  currentRole: Role;
   onEdit?: () => void;
   onDelete: () => void;
   t: ContributeDict;
 }) {
-  if (!owned) return null;
+  if (!canManage(owned, currentRole)) return null;
   return (
     <div className="flex shrink-0 items-center gap-1.5">
       {onEdit && (
@@ -376,7 +395,7 @@ function SubjectCard({ subject, api }: { subject: MockSubject; api: Api }) {
           <h3 className="text-lg font-semibold leading-snug tracking-tight text-foreground">
             {displayName(subject.title, subject.titleAr, lang)}
           </h3>
-          <RowActions owned={owned} onDelete={del} t={t} />
+          <RowActions owned={owned} currentRole={api.currentRole} onDelete={del} t={t} />
         </div>
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <span className="text-xs text-muted">
@@ -795,6 +814,7 @@ function SummaryRow({
         </div>
         <RowActions
           owned={owned}
+          currentRole={api.currentRole}
           onEdit={() =>
             api.onStartEdit({ kind: "summary", subjectId, id: summary.id })
           }
@@ -898,6 +918,7 @@ function ExamRow({
         </div>
         <RowActions
           owned={owned}
+          currentRole={api.currentRole}
           onEdit={() =>
             api.onStartEdit({ kind: "exam", subjectId, id: exam.id })
           }
