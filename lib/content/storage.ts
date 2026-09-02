@@ -246,7 +246,6 @@ export async function readStoredObjectPrefix(
      no per-segment encoding (the quarantine path is server-generated ASCII). */
   const objectKey = `${RESOURCES_BUCKET}/${path}`;
   let res: Response;
-  const tFetch = performance.now();
   try {
     res = await fetch(`${base}/object/${objectKey}`, {
       headers: {
@@ -256,13 +255,6 @@ export async function readStoredObjectPrefix(
       cache: "no-store",
     });
   } catch (err) {
-    logger.info("prefix fetch done", {
-      step: "prefix",
-      phase: "fetch",
-      op: "fetch",
-      durationMs: Math.round(performance.now() - tFetch),
-      ok: false,
-    });
     /* Diagnostic only — same null return as before. */
     logger.warn("finalize: storage range-read transport failed", {
       step: "range-read",
@@ -270,14 +262,6 @@ export async function readStoredObjectPrefix(
     });
     return null;
   }
-  logger.info("prefix fetch done", {
-    step: "prefix",
-    phase: "fetch",
-    op: "fetch",
-    durationMs: Math.round(performance.now() - tFetch),
-    ok: res.ok,
-    status: typeof res.status === "number" ? res.status : undefined,
-  });
   if (!res.ok || !res.body) {
     /* Diagnostic only — same null return as before. */
     logger.warn("finalize: storage range-read rejected", {
@@ -291,66 +275,22 @@ export async function readStoredObjectPrefix(
   const reader = res.body.getReader();
   const out = new Uint8Array(maxBytes);
   let filled = 0;
-  let reads = 0;
-  let firstReadMs: number | null = null;
-  let subsequentMs = 0;
   try {
     while (filled < maxBytes) {
-      const tRead = performance.now();
       const { done, value } = await reader.read();
-      const readMs = Math.round(performance.now() - tRead);
-      if (reads === 0) {
-        firstReadMs = readMs;
-      } else {
-        subsequentMs += readMs;
-      }
-      reads += 1;
-      if (done) {
-        logger.info("prefix read done", {
-          step: "prefix",
-          phase: "read",
-          op: "read",
-          done: true,
-          reads,
-        });
-        break;
-      }
+      if (done) break;
       const take = Math.min(value.byteLength, maxBytes - filled);
       out.set(value.subarray(0, take), filled);
       filled += take;
     }
   } finally {
-    logger.info("prefix first read", {
-      step: "prefix",
-      phase: "read",
-      op: "firstRead",
-      durationMs: firstReadMs,
-      reads,
-    });
-    if (reads > 1) {
-      logger.info("prefix subsequent reads", {
-        step: "prefix",
-        phase: "read",
-        op: "subsequent",
-        durationMs: subsequentMs,
-        reads: reads - 1,
-      });
-    }
-    /* Stream teardown is fire-and-forget: production instrumentation proved
-       `await reader.cancel()` can block the publish path for seconds. Initiate
-       cancellation without awaiting it, and swallow any rejection so an
-       unhandled-rejection is never emitted. Bounded-read behavior and the
-       maxBytes bound are unchanged. */
-    const tCancel = performance.now();
+    /* Stream teardown must not block the publish path: production data proved
+       `await reader.cancel()` can stall for seconds. Initiate cancellation
+       without awaiting it, and swallow any rejection so an unhandled-rejection
+       is never emitted. Bounded-read behavior and the maxBytes bound are
+       unchanged. */
     void reader.cancel().catch(() => {
       /* best-effort teardown — never throw on the publish path */
-    });
-    logger.info("prefix cancel", {
-      step: "prefix",
-      phase: "cancel",
-      op: "cancel",
-      initiated: true,
-      durationMs: Math.round(performance.now() - tCancel),
     });
   }
   return filled > 0 ? out.subarray(0, filled) : null;
@@ -381,7 +321,6 @@ export async function finalizeStoredUpload(input: {
   /* Diagnostic pacing log. NEVER log the quarantine path, the user id, signed
      URLs, tokens, or credentials — only kind + safe numeric/boolean fields. */
   logger.info("finalize upload: begin", { kind: input.kind });
-  const finalizeStartedMs = performance.now();
 
   /* Only ever finalize an object the current user was issued a token for. */
   if (!input.quarantinePath.startsWith(`${QUARANTINE_PREFIX}${input.userId}/`)) {
@@ -393,12 +332,7 @@ export async function finalizeStoredUpload(input: {
     return { ok: false, error: "invalid_type" };
   }
 
-  const infoStartedMs = performance.now();
   const info = await getStoredObjectInfo(input.quarantinePath);
-  logger.info("publish timing: storage info", {
-    step: "info",
-    durationMs: Math.round(performance.now() - infoStartedMs),
-  });
   if (!info) {
     await safeRemove(input.quarantinePath);
     logger.warn("finalize failed: object info unavailable", {
@@ -430,12 +364,7 @@ export async function finalizeStoredUpload(input: {
     return { ok: false, error: "too_large" };
   }
 
-  const headerStartedMs = performance.now();
   const header = await readStoredObjectPrefix(input.quarantinePath, PDF_HEADER_MAX);
-  logger.info("publish timing: storage prefix", {
-    step: "prefix",
-    durationMs: Math.round(performance.now() - headerStartedMs),
-  });
   if (!header) {
     await safeRemove(input.quarantinePath);
     logger.warn("finalize failed: header unreadable", {
@@ -463,14 +392,9 @@ export async function finalizeStoredUpload(input: {
       : summaryStoragePath("application/pdf");
 
   const admin = createAdminClient();
-  const moveStartedMs = performance.now();
   const { error: moveError } = await admin.storage
     .from(RESOURCES_BUCKET)
     .move(input.quarantinePath, finalPath);
-  logger.info("publish timing: storage move", {
-    step: "move",
-    durationMs: Math.round(performance.now() - moveStartedMs),
-  });
   if (moveError) {
     await safeRemove(input.quarantinePath);
     /* Redact any quarantine-path segment that a storage error message echoes. */
@@ -492,11 +416,6 @@ export async function finalizeStoredUpload(input: {
     step: "move",
     kind: input.kind,
     size: info.size,
-  });
-  logger.info("publish timing: finalize", {
-    step: "finalize",
-    kind: input.kind,
-    durationMs: Math.round(performance.now() - finalizeStartedMs),
   });
   return { ok: true, finalPath, size: info.size };
 }

@@ -1,7 +1,6 @@
 import { redirect } from "next/navigation";
 import type { User } from "@supabase/supabase-js";
 import { createClient } from "./supabase-server";
-import { logger } from "../logger";
 import { isAtLeast, isRole, type Role } from "./roles";
 
 /* Server-side authorization helpers.
@@ -37,14 +36,9 @@ export async function getSessionUser(): Promise<{
   supabase: ServerClient;
 } | null> {
   const supabase = await createClient();
-  const getUserStartedMs = performance.now();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  logger.info("publish timing: getUser", {
-    step: "getUser",
-    durationMs: Math.round(performance.now() - getUserStartedMs),
-  });
   if (!user) return null;
   return { user, supabase };
 }
