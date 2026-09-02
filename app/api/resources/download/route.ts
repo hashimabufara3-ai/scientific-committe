@@ -8,6 +8,7 @@ import {
   checkRateLimit,
   LIMITERS,
 } from "../../../../lib/security/rate-limit";
+import { getClientIP } from "../../../../lib/security/ip";
 
 /* Same-origin file download endpoint.
 
@@ -35,10 +36,7 @@ export async function GET(request: NextRequest) {
   const kind = searchParams.get("kind");
   const id = searchParams.get("id");
 
-  const ip =
-    request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
-    request.headers.get("x-real-ip") ??
-    null;
+  const ip = getClientIP(request);
 
   const { success: proxyOk } = await checkProxyRateLimit(ip);
   if (!proxyOk) {

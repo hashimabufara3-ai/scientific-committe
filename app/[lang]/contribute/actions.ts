@@ -585,6 +585,22 @@ export async function updateSummaryAction(
       }
     }
   } else {
+    /* Switching an uploaded summary to inline content clears the DB file
+       reference, but the previously uploaded object would otherwise be left
+       orphaned. Read the existing storage object BEFORE the update so we can
+       remove it only after the metadata write succeeds (same best-effort
+       pattern as the upload-replacement branch above). Content-only edits
+       (source stays content) and upload metadata edits (no new file) keep
+       their existing behavior. */
+    const admin = createAdminClient();
+    const { data: current } = input.source === "content"
+      ? await admin
+          .from("summaries")
+          .select("storage_path")
+          .eq("id", input.id)
+          .maybeSingle()
+      : { data: null };
+
     const { error } = await supabase.rpc("update_summary", {
       p_id: input.id,
       p_title: title,
@@ -593,6 +609,16 @@ export async function updateSummaryAction(
       p_videos: input.videos?.filter((v) => v.trim().length > 0) ?? [],
     });
     if (error) return { ok: false, errorKey: mapRpcError(error.message) };
+
+    /* Best-effort removal of the superseded object (only when switching to
+       content and the summary was actually backed by a stored object). */
+    if (input.source === "content" && current?.storage_path) {
+      try {
+        await removeResource(current.storage_path);
+      } catch {
+        /* best-effort */
+      }
+    }
   }
 
   revalidateResources(lang);
