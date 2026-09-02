@@ -529,9 +529,6 @@ export async function updateSummaryAction(
 
   const title = input.title.trim();
   if (!title) return { ok: false, errorKey: "validation" };
-  if (input.source === "upload" && !input.storagePath) {
-    return { ok: false, errorKey: "uploadMissing" };
-  }
   if (input.source === "content" && !input.content?.trim()) {
     return { ok: false, errorKey: "validation" };
   }
