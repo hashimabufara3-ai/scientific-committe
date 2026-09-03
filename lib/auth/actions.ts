@@ -12,7 +12,12 @@ import {
   normalizeUsername,
 } from "./usernames";
 import { getServerActionIP } from "../security/ip";
-import { checkRateLimit, emailKey, LIMITERS } from "../security/rate-limit";
+import {
+  checkRateLimit,
+  checkSignInRateLimit,
+  emailKey,
+  LIMITERS,
+} from "../security/rate-limit";
 import { captureActionError } from "../security/sentry";
 
 export type AuthState = {
@@ -168,6 +173,31 @@ export async function signIn(
   if (!identifier) return { error: errors.required };
   if (!password) return { error: errors.required };
 
+  /* Rate limit: 5 attempts / 15 min per IP AND per identifier (email or
+     username). Enforced BEFORE username/email resolution so a non-existent
+     username — which early-returns invalidCredentials below — still consumes
+     rate-limit budget and cannot bypass the limiter.
+
+     When CF-Connecting-IP is absent (direct Render access / local dev) the IP
+     check is skipped — no shared bucket, no spoofing. The identifier check
+     still runs and protects against cross-IP brute-force. emailKey() normalizes
+     its input internally (trim + lowercase), so for an email identifier this
+     bucket is identical to the previous emailKey(authEmail) key.
+
+     Brute-force protection FAILS CLOSED: if Upstash/Redis is unavailable we
+     deny the sign-in rather than silently admit unlimited attempts (see
+     checkSignInRateLimit). */
+  const ip = await getServerActionIP();
+  const [ipOk, identifierOk] = await Promise.all([
+    ip
+      ? checkSignInRateLimit(LIMITERS.signInIp, ip)
+      : ({ success: true } as const),
+    checkSignInRateLimit(LIMITERS.signInEmail, emailKey(identifier)),
+  ]);
+  if (!ipOk.success || !identifierOk.success) {
+    return { error: errors.rateLimited };
+  }
+
   const supabase = await createClient();
 
   /* Resolve the identifier to an Auth email.
@@ -191,21 +221,6 @@ export async function signIn(
       return { error: errors.invalidCredentials };
     }
     authEmail = resolvedEmail;
-  }
-
-  /* Rate limit: 5 attempts / 15 min per IP AND per resolved email.
-     When CF-Connecting-IP is absent (direct Render access / local dev) the IP
-     check is skipped — no shared bucket, no spoofing. The email check still
-     runs and protects against cross-IP brute-force. */
-  const ip = await getServerActionIP();
-  const [ipOk, emailOk] = await Promise.all([
-    ip
-      ? checkRateLimit(LIMITERS.signInIp, ip)
-      : ({ success: true } as const),
-    checkRateLimit(LIMITERS.signInEmail, emailKey(authEmail)),
-  ]);
-  if (!ipOk.success || !emailOk.success) {
-    return { error: errors.rateLimited };
   }
 
   const next = sanitizeNext(readString(formData, "next"), lang);

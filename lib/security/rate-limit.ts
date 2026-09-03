@@ -140,8 +140,8 @@ const LIMITERS = {
    ---------------------------------------------------------------------------
 
    Keys are namespaced, human-readable, and contain no secrets. Emails are
-   SHA-256 hashed (truncated to 16 hex chars) to avoid storing PII in Redis
-   while still being collision-resistant for this use case. */
+   djb2-hashed (base-36 encoded) to avoid storing raw PII in Redis while still
+   spacing keys well for this use case (non-cryptographic, not for security). */
 
 function hashEmail(email: string): string {
   // Node.js 20+ has globalThis.crypto. Render uses Node 20+.
@@ -202,6 +202,48 @@ export async function checkRateLimit(
       { action: "rateLimit", route: "rate-limit" }
     );
     return { success: true };
+  }
+}
+
+/**
+ * Fail-closed sign-in rate limiter.
+ *
+ * Unlike checkRateLimit (which fails OPEN — allowing the request through when
+ * Upstash is unavailable so unrelated features stay available), brute-force /
+ * authentication protection MUST fail CLOSED: if the rate-limit backend is
+ * unreachable we cannot verify an attempt is within limits, so we deny the
+ * sign-in rather than silently admit unlimited attempts.
+ *
+ * Returns { success: false } when:
+ *   - the limiter is null (Redis credentials not configured), OR
+ *   - Upstash errors / times out (fails closed, logged + reported).
+ * Returns { success: true } ONLY on a genuine within-limit result.
+ *
+ * No internal Redis/Upstash detail is ever surfaced — callers map the boolean
+ * to a user-facing rate-limited message and never see the error.
+ */
+export async function checkSignInRateLimit(
+  limiter: Ratelimit | null,
+  key: string
+): Promise<RateLimitResult> {
+  if (!limiter) return { success: false };
+  try {
+    const result = await limiter.limit(key);
+    return { success: result.success };
+  } catch (err) {
+    logger.warn("sign-in rate-limit Upstash unavailable, failing closed", {
+      err: err instanceof Error ? err.message : String(err),
+    });
+    /* Report the degradation to Sentry so we know brute-force protection is
+       impaired. Only a fixed safe message and fixed non-sensitive metadata are
+       sent: no IP, email, username, password, tokens, cookies, session data,
+       request data, or Upstash/Redis keys and raw error text. */
+    captureActionError(
+      err,
+      "sign-in rate-limit Upstash unavailable",
+      { action: "rateLimit", route: "sign-in" }
+    );
+    return { success: false };
   }
 }
 
