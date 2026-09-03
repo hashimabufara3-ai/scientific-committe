@@ -43,6 +43,12 @@ async function originAccessAllowed(request: NextRequest): Promise<boolean> {
 
   const supplied = request.headers.get(ORIGIN_SECRET_HEADER) ?? "";
 
+  console.log("[ORIGIN DEBUG]", {
+    production: process.env.NODE_ENV === "production",
+    secretConfigured: Boolean(expected),
+    headerReceived: Boolean(supplied),
+  });
+
   /* Constant-time comparison via SHA-256 digests (edge-safe). */
   try {
     const encoder = new TextEncoder();
