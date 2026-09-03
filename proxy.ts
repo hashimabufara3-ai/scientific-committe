@@ -3,13 +3,90 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getClientIP } from "./lib/security/ip";
 import { checkProxyRateLimit } from "./lib/security/rate-limit";
 
+/* Origin-access control for the Render origin.
+
+   All public traffic must arrive through Cloudflare, which injects a private
+   X-Origin-Access-Secret header. This guard rejects any production request
+   that reaches the origin directly (the public *.onrender.com hostname) with
+   a 403, before authentication, rate limiting, or any application logic runs.
+
+   NOT user authentication: it is only an origin-access mechanism
+   (Cloudflare -> allowed, direct Render -> rejected).
+
+   Behavior:
+   - Non-production (local dev): allowed (no Cloudflare required).
+   - /api/health: exempted EXACTLY so Render's liveness probe works.
+   - ORIGIN_ACCESS_SECRET unset in production: FAIL CLOSED (403 everything
+     other than /api/health) so protection can never be silently disabled.
+   - Header missing or wrong: 403.
+
+   Constant-time comparison: the supplied and expected values are hashed with
+   SHA-256 (Web Crypto, available on the Edge runtime) and the fixed-length
+   digests are compared with an XOR accumulator, so timing does not reveal
+   where/whether they differ. The secret is never logged, never sent to
+   Sentry, and never included in responses. */
+
+const ORIGIN_SECRET_HEADER = "x-origin-access-secret";
+const HEALTH_PATH = "/api/health";
+
+async function originAccessAllowed(request: NextRequest): Promise<boolean> {
+  /* Local development must not require Cloudflare infrastructure. */
+  if (process.env.NODE_ENV !== "production") return true;
+
+  /* Render/external liveness probe — exempt exactly this endpoint only. */
+  if (request.nextUrl.pathname === HEALTH_PATH) return true;
+
+  /* Fail closed: production without a configured secret rejects all traffic
+     rather than silently leaving the origin protection disabled. */
+  const expected = process.env.ORIGIN_ACCESS_SECRET;
+  if (!expected) return false;
+
+  const supplied = request.headers.get(ORIGIN_SECRET_HEADER) ?? "";
+
+  /* Constant-time comparison via SHA-256 digests (edge-safe). */
+  try {
+    const encoder = new TextEncoder();
+    const [suppliedDigest, expectedDigest] = await Promise.all([
+      crypto.subtle.digest("SHA-256", encoder.encode(supplied)),
+      crypto.subtle.digest("SHA-256", encoder.encode(expected)),
+    ]);
+    const suppliedBytes = new Uint8Array(suppliedDigest);
+    const expectedBytes = new Uint8Array(expectedDigest);
+    let diff = 0;
+    for (let i = 0; i < suppliedBytes.length && i < expectedBytes.length; i += 1) {
+      diff |= suppliedBytes[i] ^ expectedBytes[i];
+    }
+    return diff === 0 && suppliedBytes.length === expectedBytes.length;
+  } catch {
+    /* Hashing failure: fail closed (never allow on error). */
+    return false;
+  }
+}
+
+function forbiddenResponse(): NextResponse {
+  return new NextResponse(null, {
+    status: 403,
+    headers: {
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 /* Next.js 16 renamed middleware → proxy. This proxy:
-   1. Applies a global per-IP flood limit (100 req/min) at the edge.
-   2. Refreshes Supabase auth session cookies on navigation.
+   1. Enforces origin-access control (Cloudflare-only) before anything else.
+   2. Applies a global per-IP flood limit (100 req/min) at the edge.
+   3. Refreshes Supabase auth session cookies on navigation.
    It performs NO redirects and NO route protection — protected routes enforce
    authentication server-side. If the environment is not configured yet, pass
    requests through untouched. */
 export async function proxy(request: NextRequest) {
+  /* --- Layer 0: Origin-access control (fail-closed in production) ---
+     Runs before rate limiting, auth handling, server actions, and protected
+     application logic, so a direct-origin request can never reach them. */
+  if (!(await originAccessAllowed(request))) {
+    return forbiddenResponse();
+  }
+
   /* --- Layer 1: Global IP flood protection (fail-open) --- */
   const ip = getClientIP(request);
   const { success: allowed } = await checkProxyRateLimit(ip);
