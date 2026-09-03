@@ -49,6 +49,16 @@ async function originAccessAllowed(request: NextRequest): Promise<boolean> {
     headerReceived: Boolean(supplied),
   });
 
+  console.log("[ORIGIN HEADERS DEBUG]", {
+    cfIpCountry: Boolean(request.headers.get("cf-ipcountry")),
+    trueClientIp: Boolean(request.headers.get("true-client-ip")),
+    cfConnectingIp: Boolean(request.headers.get("cf-connecting-ip")),
+    cfRay: Boolean(request.headers.get("cf-ray")),
+    xForwardedFor: Boolean(request.headers.get("x-forwarded-for")),
+    host: Boolean(request.headers.get("host")),
+    originSecret: Boolean(request.headers.get("x-origin-access-secret")),
+  });
+
   /* Constant-time comparison via SHA-256 digests (edge-safe). */
   try {
     const encoder = new TextEncoder();
