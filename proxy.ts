@@ -57,6 +57,7 @@ async function originAccessAllowed(request: NextRequest): Promise<boolean> {
     xForwardedFor: Boolean(request.headers.get("x-forwarded-for")),
     host: Boolean(request.headers.get("host")),
     originSecret: Boolean(request.headers.get("x-origin-access-secret")),
+    testHeader: Boolean(request.headers.get("x-test-header")),
   });
 
   /* Constant-time comparison via SHA-256 digests (edge-safe). */
