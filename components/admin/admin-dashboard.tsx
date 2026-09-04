@@ -8,7 +8,7 @@ import {
   deleteAccountAction,
   changeMemberPasswordAction,
   type AdminActionResult,
-} from "@/app/[lang]/admin/actions";
+} from "@/app/[lang]/management/actions";
 import { canAssign, ROLES, type Role } from "@/lib/auth/roles";
 import {
   AccentChip,

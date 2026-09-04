@@ -57,7 +57,7 @@ export default function Nav({ dict, lang }: { dict: NavDict; lang: string }) {
       ? [{ href: `/${lang}/contribute`, label: dict.contribute }]
       : []),
     ...(isAdminOrOwner
-      ? [{ href: `/${lang}/admin`, label: dict.admin }]
+      ? [{ href: `/${lang}/management`, label: dict.admin }]
       : []),
     /* Secondary destinations: no eager prefetch (reduces the per-page RSC
        prefetch burst while primary navigation keeps eager prefetching). */

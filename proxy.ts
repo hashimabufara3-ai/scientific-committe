@@ -130,7 +130,7 @@ export async function proxy(request: NextRequest) {
      normal (non-RSC) document requests, auth/change-password routes, Route
      Handlers and all publicly-accessible pages. */
   const isProtectedRoute =
-    /^\/(en|ar)\/(contribute|admin)(\/|$)/.test(request.nextUrl.pathname);
+    /^\/(en|ar)\/(contribute|management)(\/|$)/.test(request.nextUrl.pathname);
   const isRscSubrequest =
     request.headers.has("rsc") || request.nextUrl.searchParams.has("_rsc");
   if (

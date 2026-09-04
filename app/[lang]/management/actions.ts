@@ -119,7 +119,7 @@ export async function setRoleAction(
   if (membersError) {
     captureActionError(membersError, "admin_list_members RPC failed", {
       action: "setRoleAction",
-      route: `/${lang}/admin`,
+      route: `/${lang}/management`,
       code: membersError.code,
     });
   }
@@ -144,7 +144,7 @@ export async function setRoleAction(
   });
   if (error) return { ok: false, errorKey: mapRpcError(error.message) };
 
-  revalidatePath(`/${lang}/admin`);
+  revalidatePath(`/${lang}/management`);
   return { ok: true };
 }
 
@@ -181,7 +181,7 @@ export async function transferOwnershipAction(
   if (membersError) {
     captureActionError(membersError, "admin_list_members RPC failed", {
       action: "transferOwnershipAction",
-      route: `/${lang}/admin`,
+      route: `/${lang}/management`,
       code: membersError.code,
     });
   }
@@ -205,7 +205,7 @@ export async function transferOwnershipAction(
   });
   if (error) return { ok: false, errorKey: mapRpcError(error.message) };
 
-  revalidatePath(`/${lang}/admin`);
+  revalidatePath(`/${lang}/management`);
   return { ok: true };
 }
 
@@ -259,7 +259,7 @@ export async function deleteAccountAction(
   if (membersError) {
     captureActionError(membersError, "admin_list_members RPC failed", {
       action: "deleteAccountAction",
-      route: `/${lang}/admin`,
+      route: `/${lang}/management`,
       code: membersError.code,
     });
   }
@@ -295,7 +295,7 @@ export async function deleteAccountAction(
       "admin_list_committee_members RPC failed",
       {
         action: "deleteAccountAction",
-        route: `/${lang}/admin`,
+        route: `/${lang}/management`,
         code: committeeListError.code,
       }
     );
@@ -315,7 +315,7 @@ export async function deleteAccountAction(
         "admin_delete_committee_member failed during account deletion",
         {
           action: "deleteAccountAction",
-          route: `/${lang}/admin`,
+          route: `/${lang}/management`,
           code: memberDeleteError.code,
         }
       );
@@ -332,7 +332,7 @@ export async function deleteAccountAction(
   if (deleteError) {
     captureActionError(deleteError, "auth.admin.deleteUser failed", {
       action: "deleteAccountAction",
-      route: `/${lang}/admin`,
+      route: `/${lang}/management`,
       code: deleteError.code,
     });
     return { ok: false, errorKey: "generic" };
@@ -352,7 +352,7 @@ export async function deleteAccountAction(
     } as Record<string, unknown>,
   });
 
-  revalidatePath(`/${lang}/admin`);
+  revalidatePath(`/${lang}/management`);
   if (linkedCommitteeMember) revalidatePath(`/${lang}/about`);
   return { ok: true };
 }
@@ -426,7 +426,7 @@ export async function changeMemberPasswordAction(
   if (membersError) {
     captureActionError(membersError, "admin_list_members RPC failed", {
       action: "changeMemberPasswordAction",
-      route: `/${lang}/admin`,
+      route: `/${lang}/management`,
       code: membersError.code,
     });
   }
@@ -449,7 +449,7 @@ export async function changeMemberPasswordAction(
   if (updateError) {
     captureActionError(updateError, "admin.updateUserById failed", {
       action: "changeMemberPasswordAction",
-      route: `/${lang}/admin`,
+      route: `/${lang}/management`,
       code: updateError.code,
     });
     return { ok: false, errorKey: "generic" };
@@ -467,7 +467,7 @@ export async function changeMemberPasswordAction(
   if (mcpError) {
     captureActionError(mcpError, "set_must_change_password failed", {
       action: "changeMemberPasswordAction",
-      route: `/${lang}/admin`,
+      route: `/${lang}/management`,
       code: mcpError.code,
     });
   }
@@ -483,7 +483,7 @@ export async function changeMemberPasswordAction(
     } as Record<string, unknown>,
   });
 
-  revalidatePath(`/${lang}/admin`);
+  revalidatePath(`/${lang}/management`);
   return { ok: true };
 }
 
@@ -560,7 +560,7 @@ export async function createCommitteeMemberAction(
     return { ok: false, errorKey: mapCommitteeRpcError(error.message) };
   }
 
-  revalidatePath(`/${lang}/admin`);
+  revalidatePath(`/${lang}/management`);
   revalidatePath(`/${lang}/about`);
   return { ok: true };
 }
@@ -713,7 +713,7 @@ const supabase = await createClient();
         "admin.createUser failed",
         {
           action: "createCommitteeMemberWithAccountAction",
-          route: `/${lang}/admin`,
+          route: `/${lang}/management`,
           code: authError?.code,
         }
       );
@@ -743,7 +743,7 @@ const supabase = await createClient();
         "admin.createUser profile read-back failed",
         {
           action: "createCommitteeMemberWithAccountAction",
-          route: `/${lang}/admin`,
+          route: `/${lang}/management`,
           code: profileReadError?.code,
         }
       );
@@ -770,7 +770,7 @@ const supabase = await createClient();
       if (roleError) {
         captureActionError(roleError, "assign_role failed during account creation", {
           action: "createCommitteeMemberWithAccountAction",
-          route: `/${lang}/admin`,
+          route: `/${lang}/management`,
           code: roleError.code,
         });
         /* Compensating: delete the auth user we just created. */
@@ -792,7 +792,7 @@ const supabase = await createClient();
     if (mcpError) {
       captureActionError(mcpError, "set_must_change_password failed", {
         action: "createCommitteeMemberWithAccountAction",
-        route: `/${lang}/admin`,
+        route: `/${lang}/management`,
         code: mcpError.code,
       });
       /* Compensating: delete the auth user we just created. */
@@ -824,7 +824,7 @@ const supabase = await createClient();
         "admin_create_committee_member failed",
         {
           action: "createCommitteeMemberWithAccountAction",
-          route: `/${lang}/admin`,
+          route: `/${lang}/management`,
           code: memberError?.code,
         }
       );
@@ -853,13 +853,13 @@ const supabase = await createClient();
     if (auditError) {
       captureActionError(auditError, "log_audit_event failed", {
         action: "createCommitteeMemberWithAccountAction",
-        route: `/${lang}/admin`,
+        route: `/${lang}/management`,
         code: auditError.code,
       });
       /* Audit failure is non-fatal — the member was created successfully. */
     }
 
-    revalidatePath(`/${lang}/admin`);
+    revalidatePath(`/${lang}/management`);
     revalidatePath(`/${lang}/about`);
 
     return {
@@ -874,7 +874,7 @@ const supabase = await createClient();
   } catch (err) {
     captureActionError(err, "createCommitteeMemberWithAccountAction error", {
       action: "createCommitteeMemberWithAccountAction",
-      route: `/${lang}/admin`,
+      route: `/${lang}/management`,
     });
 
     /* Catch-all compensation: if we created an auth user but something
@@ -931,7 +931,7 @@ export async function updateCommitteeMemberAction(
     return { ok: false, errorKey: mapCommitteeRpcError(error.message) };
   }
 
-  revalidatePath(`/${lang}/admin`);
+  revalidatePath(`/${lang}/management`);
   revalidatePath(`/${lang}/about`);
   return { ok: true };
 }
@@ -964,7 +964,7 @@ export async function deleteCommitteeMemberAction(
     return { ok: false, errorKey: mapCommitteeRpcError(error.message) };
   }
 
-  revalidatePath(`/${lang}/admin`);
+  revalidatePath(`/${lang}/management`);
   revalidatePath(`/${lang}/about`);
   return { ok: true };
 }

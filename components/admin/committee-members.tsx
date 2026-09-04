@@ -10,7 +10,7 @@ import {
   deleteCommitteeMemberAction,
   type CommitteeMemberActionResult,
   type CommitteeMemberWithAccountActionResult,
-} from "@/app/[lang]/admin/actions";
+} from "@/app/[lang]/management/actions";
 import {
   Panel,
   PrimaryButton,
