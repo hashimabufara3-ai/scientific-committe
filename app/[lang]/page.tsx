@@ -26,7 +26,7 @@ export async function generateMetadata({
   const { lang } = await params;
   if (!hasLocale(lang)) return {};
   const dict = await getDictionary(lang);
-  return { title: dict.hero.titleA, description: dict.hero.subtitle };
+  return { title: dict.metadata.siteName, description: dict.metadata.description };
 }
 
 /* Real, server-fetched hero statistic. Only values backed by a trustworthy
