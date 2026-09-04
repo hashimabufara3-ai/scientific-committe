@@ -2,8 +2,8 @@
   "metadata": {
     "siteName": "Scientific Committee PTUK Al-Aroub",
     "university": "Palestine Technical University – Kadoorie",
-    "campus": "PTUK – Al-Aroub Branch",
-    "description": "Official website of the Scientific Committee at Palestine Technical University – Kadoorie, Al-Aroub branch, serving students with resources, workshops, events, and academic materials.",
+    "campus": "PTUK – Al-Aroub",
+    "description": "Official website of the Scientific Committee at Palestine Technical University – Kadoorie, Al-Aroub, serving students with resources, workshops, events, and academic materials.",
     "keywords": [
       "Scientific Committee",
       "PTUK",
@@ -34,7 +34,7 @@
     "navMobile": "Mobile"
   },
   "hero": {
-    "kicker": "Palestine Technical University – Kadoorie · Al-Aroub Branch",
+    "kicker": "Palestine Technical University – Kadoorie · Al-Aroub",
     "titleA": "Where students",
     "titleHighlight": "turn curiosity into capability.",
     "subtitle": "The Scientific Committee is a student-led community that turns academic knowledge into practical skills — through summaries, opportunities, and open discussion.",
@@ -272,7 +272,7 @@
     "kicker": "Contact",
     "title": "Get in touch",
     "subtitle": "Questions, ideas, or want to join? Reach the committee any day of the week.",
-    "location": "PTUK – Al-Aroub Branch",
+    "location": "PTUK – Al-Aroub",
     "availability": "Availability: 9:00 AM – 2:00 PM",
     "socialsLabel": "Follow the committee",
     "socials": [
@@ -289,11 +289,11 @@
     ]
   },
   "footer": {
-    "tagline": "The Scientific Committee is a student-led hub at Palestine Technical University – Kadoorie, Al-Aroub Branch.",
+    "tagline": "The Scientific Committee is a student-led hub at Palestine Technical University – Kadoorie, Al-Aroub.",
     "quickLinks": "Quick links",
     "contact": "Contact",
     "follow": "Follow us",
-    "location": "PTUK – Al-Aroub Branch",
+    "location": "PTUK – Al-Aroub",
     "rights": "Palestine Technical University – Kadoorie",
     "madeBy": "Designed & Developed by Hashim Abufara"
   },
