@@ -38,6 +38,12 @@ export default {
       originHeaders.set("Next-Action", nextAction);
     }
 
+    const cookie = request.headers.get("Cookie");
+
+    if (cookie) {
+      originHeaders.set("Cookie", cookie);
+    }
+
     originHeaders.set("X-Origin-Access-Secret", SECRET);
 
     const cfConnectingIp = request.headers.get("CF-Connecting-IP");
