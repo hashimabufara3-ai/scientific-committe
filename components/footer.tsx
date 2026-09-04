@@ -71,6 +71,8 @@ export function Footer({ dict, lang }: { dict: FooterDict; lang: string }) {
                     <li key={social.label}>
                       <a
                         href={social.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
                         className="inline-flex rounded-full border border-white/10 px-3 py-2.5 text-xs text-muted transition hover:border-accent/40 hover:text-accent"
                       >
                         {social.label}

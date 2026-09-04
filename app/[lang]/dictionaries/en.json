@@ -285,6 +285,11 @@
         "label": "Discord",
         "handle": "Join us on Discord",
         "url": "https://discord.gg/5uzwmZtdV"
+      },
+      {
+        "label": "LinkedIn",
+        "handle": "@scientific-committee",
+        "url": "https://www.linkedin.com/in/scientific-committee"
       }
     ]
   },
