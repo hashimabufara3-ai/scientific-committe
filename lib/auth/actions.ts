@@ -1,6 +1,5 @@
 "use server";
 
-import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import type { AuthError } from "@supabase/supabase-js";
@@ -26,7 +25,6 @@ export type AuthState = {
   value?: string;
 };
 
-const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD_LENGTH = 6;
 
 /* Timing-hardening delay (L-4): when a username does not resolve, the action
@@ -51,10 +49,6 @@ function readLang(formData: FormData): string {
   return hasLocale(lang) ? lang : "en";
 }
 
-function isValidEmail(email: string): boolean {
-  return EMAIL_PATTERN.test(email);
-}
-
 /* Only allow same-site localized paths as redirect targets. */
 function sanitizeNext(next: string, lang: string): string {
   if (
@@ -65,18 +59,6 @@ function sanitizeNext(next: string, lang: string): string {
     return next;
   }
   return `/${lang}`;
-}
-
-async function getOrigin(): Promise<string> {
-  const envUrl = process.env.NEXT_PUBLIC_SITE_URL;
-  if (envUrl) return envUrl;
-
-  const h = await headers();
-  return (
-    h.get("origin") ??
-    h.get("x-origin") ??
-    `${h.get("x-forwarded-proto") ?? "http"}://${h.get("x-forwarded-host") ?? h.get("host") ?? "localhost:3000"}`
-  );
 }
 
 /* Map Supabase errors to safe, human-readable localized messages. Never reveal
@@ -259,73 +241,11 @@ export async function signUp(
   const dict = await getDictionary(lang);
   const errors = dict.auth.errors;
 
-  const email = readString(formData, "email").trim();
-  const fullName = readString(formData, "fullName").trim();
-  const username = normalizeUsername(readString(formData, "username"));
-  const password = readString(formData, "password");
-  const confirmPassword = readString(formData, "confirmPassword");
-
-  if (!isValidEmail(email)) return { error: errors.invalidEmail };
-  if (!fullName) return { error: errors.required };
-  if (!isValidUsername(username)) return { error: errors.usernameInvalid };
-  if (isReservedUsername(username)) return { error: errors.usernameReserved };
-  if (password.length < MIN_PASSWORD_LENGTH)
-    return { error: errors.passwordTooShort };
-  if (password !== confirmPassword)
-    return { error: errors.passwordsMismatch };
-
-  /* Rate limit: 3 attempts / hour per IP.
-     When CF-Connecting-IP is absent, skip — no shared bucket. */
-  const ip = await getServerActionIP();
-  if (ip) {
-    const { success: ipOk } = await checkRateLimit(LIMITERS.signUpIp, ip);
-    if (!ipOk) return { error: errors.rateLimited };
-  }
-
-  const next = sanitizeNext(
-    readString(formData, "next") || `/${lang}/account`,
-    lang
-  );
-  const origin = await getOrigin();
-
-  const supabase = await createClient();
-  // Advisory pre-check only — the unique index on lower(profiles.username) is
-  // the final authority. The trigger resolves any concurrent race
-  // deterministically, and the reserved list is enforced again in SQL.
-  const { data: usernameAvailable, error: availabilityError } =
-    await supabase.rpc("username_available", {
-      p_username: username,
-    });  if (availabilityError) {
-    captureActionError(availabilityError, "username_available RPC failed", {
-      action: "signUp",
-      route: `/${lang}/auth/sign-up`,
-      code: availabilityError.code,
-    });
-  }
-  if (usernameAvailable === false) return { error: errors.usernameTaken };
-
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: {
-      data: { full_name: fullName, username },
-      emailRedirectTo: `${origin}/${lang}/auth/callback?next=${encodeURIComponent(next)}`,
-    },
-  });
-  if (error) {
-    captureActionError(error, "supabase.auth.signUp failed", {
-      action: "signUp",
-      route: `/${lang}/auth/sign-up`,
-      code: error.code,
-    });
-    return { error: mapAuthError(error, errors) };
-  }
-
-  // With email confirmation enabled there is no session yet — ask the user to
-  // confirm. If confirmation is ever disabled, the session arrives immediately.
-  if (data.session) redirect(next);
-
-  return { success: true };
+  /* Public self-registration is disabled. Accounts are created exclusively by
+     administrators. Fail closed immediately — before validation, rate limiting,
+     or any Supabase Auth call — so an anonymous client can never reach
+     supabase.auth.signUp(). */
+  return { error: errors.signupsDisabled };
 }
 
 /* ---------------------------------------------------------------------------
