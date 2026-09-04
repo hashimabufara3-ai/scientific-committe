@@ -6,6 +6,7 @@ import { getDictionary, hasLocale } from "./dictionaries";
 import Nav from "../../components/nav";
 import { Footer } from "../../components/footer";
 import WorldBackdrop from "../../components/world-backdrop";
+import { ScrollRestore } from "../../components/scroll-restore";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -108,6 +109,7 @@ export default async function RootLayout({
           }}
           lang={lang}
         />
+        <ScrollRestore />
       </body>
     </html>
   );
