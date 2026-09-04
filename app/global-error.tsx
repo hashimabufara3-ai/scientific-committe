@@ -14,10 +14,10 @@ import { captureBoundaryError } from "../lib/security/sentry";
 
 type GlobalErrorProps = {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 };
 
-export default function GlobalError({ error, reset }: GlobalErrorProps) {
+export default function GlobalError({ error, retry }: GlobalErrorProps) {
   /* P1-1A: Safe, fail-open internal error capture. Does NOT alter the visible
      error screen, its accessibility, or the recover/reload actions. Only a
      sanitized message and the error digest are sent; all sensitive data is
@@ -63,7 +63,7 @@ export default function GlobalError({ error, reset }: GlobalErrorProps) {
           <div style={{ marginTop: "2rem", display: "flex", flexWrap: "wrap", gap: "0.75rem", justifyContent: "center" }}>
             <button
               type="button"
-              onClick={reset}
+              onClick={retry}
               style={{
                 borderRadius: "9999px",
                 border: "0",

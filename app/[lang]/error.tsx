@@ -22,7 +22,7 @@ const LOCALE_PATTERN = /^\/(en|ar)(?=\/|$)/;
 
 type ErrorPageProps = {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 };
 
 const COPY: Record<
@@ -60,7 +60,7 @@ const COPY: Record<
   },
 };
 
-export default function Error({ error, reset }: ErrorPageProps) {
+export default function Error({ error, retry }: ErrorPageProps) {
   const pathname = usePathname() ?? "";
   const match = pathname.match(LOCALE_PATTERN);
   const lang = match ? match[1] : "en";
@@ -88,7 +88,7 @@ export default function Error({ error, reset }: ErrorPageProps) {
       body={isAr ? c.bodyAr : c.bodyEn}
       dir={isAr ? "rtl" : "ltr"}
       actions={[
-        { label: isAr ? c.retryAr : c.retryEn, onClick: reset, variant: "primary" },
+        { label: isAr ? c.retryAr : c.retryEn, onClick: retry, variant: "primary" },
         { label: isAr ? c.homeAr : c.homeEn, href: `/${lang}`, variant: "ghost" },
       ]}
     />
