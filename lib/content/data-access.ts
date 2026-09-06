@@ -6,8 +6,8 @@
    with only a data-source change.
 
    IMPORTANT (mobile + security):
-   - PDF BYTES are never returned here. For uploaded files we return only
-     metadata plus, on demand, a short-lived signed URL in `accessUrl`.
+   - Uploaded FILE BYTES are never returned here. For uploaded files we return
+     only metadata plus, on demand, a short-lived signed URL in `accessUrl`.
    - Public reads use the anonymous, cookie-free client so the routes are not
      forced dynamic and can be statically rendered / ISR-cached.
    - Individual signed URLs live in their own helper

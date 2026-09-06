@@ -39,6 +39,7 @@ import type {
   View,
 } from "./types";
 import { SparkIcon } from "../icons";
+import { mimeFromFileName } from "@/lib/content/file-format";
 
 /* The contributor workspace.
 
@@ -46,8 +47,8 @@ import { SparkIcon } from "../icons";
    /[lang]/contribute/page.tsx via getSubjects() (metadata only) and refreshed
    through router.refresh() after every mutation. Mutations go through the
    Server Actions in app/[lang]/contribute/actions.ts — the single place rows
-   are written to the database. PDF bytes go DIRECTLY from the browser to the
-   private Storage bucket via a short-lived signed upload URL
+   are written to the database. Uploaded file bytes go DIRECTLY from the
+   browser to the private Storage bucket via a short-lived signed upload URL
    (/api/resources/upload-auth); only upload metadata passes through Render.
    The browser never reads a file as a data URL, never stores bytes in
    localStorage, and never sends bytes through a Server Action argument.
@@ -65,7 +66,7 @@ type UploadResult = {
 
 /* Why an upload was rejected, so the UI can show a specific localized message
    instead of one generic "could not upload". "type" also covers files whose
-   declared MIME or magic bytes are not PDF. */
+   declared MIME or magic bytes are not an allowed format. */
 type UploadFailure = "type" | "size" | "network";
 
 type UploadOutcome =
@@ -193,17 +194,18 @@ export default function ContributorDashboard({
      short-lived signed upload URL issued by /api/resources/upload-auth. Only
      upload METADATA travels to Render (a few hundred bytes); the 3 MB file body
      goes straight from the browser to Supabase Storage. The server validates
-     the actual stored object (size + PDF magic bytes) before any metadata is
+     the actual stored object (size + format magic bytes) before any metadata is
      written (finalizeStoredUpload inside the resource Server Actions). The
      server's 422 codes map to the same type/size reasons as before. */
   const uploadFile = useCallback(
     async (file: File, kind: "summary" | "exam"): Promise<UploadOutcome> => {
       setUploadPhase("preparing");
       try {
-        /* Best-effort MIME for the metadata request; the PDF gate is still
-           enforced server-side on the stored object, not by this string. */
-        const mimeType =
-          file.type || (/\.pdf$/i.test(file.name) ? "application/pdf" : "");
+        /* Best-effort MIME for the metadata request, falling back to the file
+           extension for files whose browser-reported type is empty. The format
+           gate is enforced server-side on the stored object, not by this
+           string. */
+        const mimeType = file.type || mimeFromFileName(file.name) || "";
         const res = await fetch("/api/resources/upload-auth", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -244,7 +246,7 @@ export default function ContributorDashboard({
           value: {
             path,
             fileName: file.name,
-            mimeType: mimeType || "application/pdf",
+            mimeType,
             fileSize: file.size,
           },
         };

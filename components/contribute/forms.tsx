@@ -16,6 +16,7 @@ import type {
   SummaryFormValues,
   UploadPhase,
 } from "./types";
+import { allowedExtension, mimeFromFileName } from "@/lib/content/file-format";
 
 /* Phase-aware busy label for the submit button. During a direct-to-Storage
    file upload the existing upload phases are surfaced verbatim; otherwise a
@@ -77,10 +78,11 @@ function FormShell({ t, canSubmit, submitLabel, onCancel, children, hint, busy, 
 
 /* ---- Shared single-file upload -------------------------------------------
    One "choose a file" flow for every contribution type (summary uploads and
-   previous-exam files): PDF only, 3 MB cap. The raw browser File is kept
-   (never read as a data URL). The dashboard uploads that native File DIRECTLY
-   to Storage via a short-lived signed upload URL, so only the Storage path +
-   display metadata ever reach Render or the database. */
+   previous-exam files): PDF + supported images (JPG, PNG, WebP, GIF), 3 MB
+   cap. The raw browser File is kept (never read as a data URL). The dashboard
+   uploads that native File DIRECTLY to Storage via a short-lived signed
+   upload URL, so only the Storage path + display metadata ever reach Render or
+   the database. */
 
 export type FileState = {
   fileName: string;
@@ -138,7 +140,7 @@ function FileUploadField({
       <input
         id={inputId}
         type="file"
-        accept=".pdf,application/pdf"
+        accept={FILE_ACCEPT}
         className="hidden"
         onChange={(e) => {
           const selected = e.target.files?.[0];
@@ -148,13 +150,12 @@ function FileUploadField({
             onFile({ ...emptyFileState(), fileError: t.forms.fileTooLarge });
             return;
           }
-          /* UX-only pre-check: new uploads are PDF-only. The server's
-             magic-byte validation remains authoritative and rejects spoofed
-             files regardless of this check. */
-          const isPdf =
-            selected.type === "application/pdf" ||
-            /\.pdf$/i.test(selected.name);
-          if (!isPdf) {
+          /* UX-only pre-check: new uploads must be PDF or a supported image.
+             The server's magic-byte validation remains authoritative and
+             rejects spoofed files regardless of this check. */
+          const declaredMime =
+            selected.type || mimeFromFileName(selected.name) || "";
+          if (!allowedExtension(declaredMime)) {
             e.target.value = "";
             onFile({
               ...emptyFileState(),
@@ -165,7 +166,7 @@ function FileUploadField({
           onFile({
             fileName: selected.name,
             file: selected,
-            fileType: selected.type,
+            fileType: selected.type || declaredMime,
             fileSize: selected.size,
             fileError: null,
             hasExisting: false,
@@ -277,6 +278,22 @@ type MaterialOption = {
    lib/content/storage.ts. The browser sends the raw File via multipart to
    Storage, which has the same cap. The server check is authoritative. */
 const MAX_FILE_BYTES = 3 * 1024 * 1024;
+
+/* File-picker `accept` hint: every allowed extension + MIME for PDF and the
+   supported images. Advisory only — the server validates the stored bytes. */
+const FILE_ACCEPT = [
+  ".pdf",
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".gif",
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+].join(",");
 
 export function SummaryForm({
   t,

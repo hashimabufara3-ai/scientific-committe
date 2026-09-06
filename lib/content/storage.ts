@@ -1,5 +1,16 @@
 import { createAdminClient } from "../auth/supabase-server";
 import { logger } from "../logger";
+import {
+  CHECK_HEADER_BYTES,
+  MAX_UPLOAD_BYTES,
+  allowedExtension,
+  mimeFromExtension,
+  resolveUploadFormat,
+} from "./file-format";
+
+/* Re-exported so existing importers of lib/content/storage keep working while
+   the single source of truth for the upload rules stays file-format.mjs. */
+export { MAX_UPLOAD_BYTES, validateFileUpload } from "./file-format";
 
 /* Server-side env access for the storage REST helpers (the admin client does
    not expose the project URL/keys). These must never be imported by browser
@@ -17,8 +28,8 @@ function requireEnv(name: string): string {
    The bucket is PRIVATE ("resources"). There are no client upload policies, so
    every write goes through these functions using the service-role client
    (server-only, never exposed to the browser). Reading is done via
-   short-lived signed URLs so PDF bytes never land in RSC payloads, React state
-   or localStorage.
+   short-lived signed URLs so file bytes never land in RSC payloads, React
+   state or localStorage.
 
    Path convention (safe, generated — never the raw upload filename):
      summaries/<uuid>.<ext>
@@ -33,64 +44,11 @@ function requireEnv(name: string): string {
 
 export const RESOURCES_BUCKET = "resources";
 
-/* Allowed upload MIME type + the file extension to use for the storage key.
-   NEW uploads are PDF-only. Existing files of other previously-allowed types
-   (PNG/JPEG/WebP/TXT) are untouched: they keep their stored metadata/path and
-   continue to be served by the read/view/download code paths whose rendering
-   is generic over the stored file type. */
-const ALLOWED_TYPES: Record<string, string> = {
-  "application/pdf": "pdf",
-};
-
-/* Preserve the prototype's cap unless the UI shows a need to change it. */
-export const MAX_UPLOAD_BYTES = 3 * 1024 * 1024;
-
-/* The PDF file signature "%PDF-" (0x25 0x50 0x44 0x46 0x2D). The PDF spec
-   allows leading whitespace before the header, so the signature is searched
-   within the first 1024 bytes of the file rather than only at byte 0. */
-const PDF_HEADER_MAX = 1024;
-const PDF_SIGNATURE = [0x25, 0x50, 0x44, 0x46, 0x2d]; // % P D F -
-
-/* Verifies the first bytes of an uploaded file really carry a PDF signature,
-   independent of the browser-reported MIME type (which is client-controlled and
-   trivially spoofable). Reads only up to 1 KB of header, never the whole file.
-   Returns false for empty/short files and for any file without "%PDF-". */
-export function isPdfSignature(bytes: Uint8Array): boolean {
-  if (!bytes || bytes.length < PDF_SIGNATURE.length) return false;
-  const limit = Math.min(bytes.length, PDF_HEADER_MAX);
-  outer: for (let i = 0; i <= limit - PDF_SIGNATURE.length; i++) {
-    for (let j = 0; j < PDF_SIGNATURE.length; j++) {
-      if (bytes[i + j] !== PDF_SIGNATURE[j]) continue outer;
-    }
-    return true;
-  }
-  return false;
-}
-
-/* Validate a raw file upload: MIME must be on the allowlist and size must be
-   within MAX_UPLOAD_BYTES. Rejects images whose browser-reported type is
-   generic (e.g. an empty string or "application/octet-stream") as well, so the
-   allowlist is always authoritative for the declared type. The PDF magic-byte
-   authenticity check (isPdfSignature) is applied separately by the upload route
-   because it needs a byte slice of the file. Returns an error code for the
-   client. */
-export function validateFileUpload(
-  mime: string,
-  size: number
-): { ok: true; extension: string } | { ok: false; error: string } {
-  if (size === 0 || size > MAX_UPLOAD_BYTES) {
-    return { ok: false, error: "too_large" };
-  }
-  const extension = storageExtension(mime);
-  if (!extension) {
-    return { ok: false, error: "invalid_type" };
-  }
-  return { ok: true, extension };
-}
-
-export function storageExtension(mime: string): string | undefined {
-  return ALLOWED_TYPES[mime];
-}
+/* The allowed upload formats, the size cap and the magic-byte signature rules
+   live in ./file-format (dependency-free) so they are unit-testable and shared
+   with the client. NEW uploads are PDF plus common raster images; SVG is
+   intentionally excluded (raw-object serving would expose script content).
+   Existing files of previously-allowed types keep their behavior. */
 
 function uuid(): string {
   return crypto.randomUUID();
@@ -98,13 +56,13 @@ function uuid(): string {
 
 /* Generate a safe object path for a summary upload. */
 export function summaryStoragePath(mime: string): string {
-  const ext = storageExtension(mime) ?? "bin";
+  const ext = allowedExtension(mime) ?? "bin";
   return `summaries/${uuid()}.${ext}`;
 }
 
 /* Generate a safe object path for an exam file upload. */
 export function examStoragePath(mime: string): string {
-  const ext = storageExtension(mime) ?? "bin";
+  const ext = allowedExtension(mime) ?? "bin";
   return `exams/${uuid()}.${ext}`;
 }
 
@@ -114,8 +72,8 @@ export function examStoragePath(mime: string): string {
    Flow: the browser asks a server endpoint for a SHORT-LIVED signed upload URL
    scoped to a server-generated quarantine path, PUTs the file straight to the
    private bucket (the 3 MB body never passes through Render), then the server
-   re-reads the actual stored object (size + PDF magic bytes), moves it to the
-   canonical path, and only then writes metadata. The quarantine object is
+   re-reads the actual stored object (size + format magic bytes), moves it to
+   the canonical path, and only then writes metadata. The quarantine object is
    never referenced by any resource row before validation and finalization.
    --------------------------------------------------------------------------- */
 
@@ -123,9 +81,14 @@ export function examStoragePath(mime: string): string {
 export const QUARANTINE_PREFIX = "quarantine/";
 
 /* Server-generated, user-scoped quarantine path. The user's id is embedded so
-   the finalize step can reject references to anyone else's pending object. */
-export function quarantineStoragePath(userId: string): string {
-  return `${QUARANTINE_PREFIX}${userId}/${uuid()}.pdf`;
+   the finalize step can reject references to anyone else's pending object.
+   The extension mirrors the DECLARED (already allowlisted) MIME so the
+   object's content type is inferred correctly for the browser PUT, while the
+   actual bytes are still re-validated against that declared type during
+   finalization. */
+export function quarantineStoragePath(userId: string, mime: string): string {
+  const ext = allowedExtension(mime) ?? "bin";
+  return `${QUARANTINE_PREFIX}${userId}/${uuid()}.${ext}`;
 }
 
 /* Issue a short-lived signed upload URL for exactly `path` (server-generated
@@ -306,16 +269,17 @@ async function safeRemove(path: string): Promise<void> {
 }
 
 /* Finalize a direct upload: verify the quarantine object is the caller's own,
-   validate the actual stored bytes (size + PDF signature), move it to the
-   canonical summaries/exams path, and clean up the quarantine object on any
-   failure so no untrusted object is ever reachable. Returns the final path
-   that the metadata RPC should store. */
+   validate the actual stored bytes (size + format magic bytes against the
+   declared type), move it to the canonical summaries/exams path, and clean up
+   the quarantine object on any failure so no untrusted object is ever
+   reachable. Returns the final path AND the detected MIME type that the
+   metadata RPC should store. */
 export async function finalizeStoredUpload(input: {
   quarantinePath: string;
   userId: string;
   kind: "summary" | "exam";
 }): Promise<
-  | { ok: true; finalPath: string; size: number }
+  | { ok: true; finalPath: string; size: number; mimeType: string }
   | { ok: false; error: "not_found" | "empty" | "too_large" | "invalid_type" | "move_failed" }
 > {
   /* Diagnostic pacing log. NEVER log the quarantine path, the user id, signed
@@ -364,7 +328,7 @@ export async function finalizeStoredUpload(input: {
     return { ok: false, error: "too_large" };
   }
 
-  const header = await readStoredObjectPrefix(input.quarantinePath, PDF_HEADER_MAX);
+  const header = await readStoredObjectPrefix(input.quarantinePath, CHECK_HEADER_BYTES);
   if (!header) {
     await safeRemove(input.quarantinePath);
     logger.warn("finalize failed: header unreadable", {
@@ -375,9 +339,20 @@ export async function finalizeStoredUpload(input: {
     });
     return { ok: false, error: "invalid_type" };
   }
-  if (!isPdfSignature(header)) {
+
+  /* The quarantine path's extension mirrors the DECLARED allowlisted MIME (set
+     by upload-auth), so the declared type can be recovered from the path. The
+     actual bytes are then matched against it — a renamed/mislabeled file whose
+     signature disagrees with the declared type is rejected here. */
+  const dot = input.quarantinePath.lastIndexOf(".");
+  const declaredMime =
+    dot >= 0 ? mimeFromExtension(input.quarantinePath.slice(dot + 1)) : undefined;
+  const resolved = declaredMime
+    ? resolveUploadFormat(declaredMime, header)
+    : { ok: false as const, error: "invalid_type" as const };
+  if (!resolved.ok) {
     await safeRemove(input.quarantinePath);
-    logger.warn("finalize failed: pdf signature not found in first bytes", {
+    logger.warn("finalize failed: format signature mismatch with declared type", {
       step: "magic-bytes",
       kind: input.kind,
       objectExists: true,
@@ -388,8 +363,8 @@ export async function finalizeStoredUpload(input: {
 
   const finalPath =
     input.kind === "exam"
-      ? examStoragePath("application/pdf")
-      : summaryStoragePath("application/pdf");
+      ? examStoragePath(resolved.mimeType)
+      : summaryStoragePath(resolved.mimeType);
 
   const admin = createAdminClient();
   const { error: moveError } = await admin.storage
@@ -417,7 +392,7 @@ export async function finalizeStoredUpload(input: {
     kind: input.kind,
     size: info.size,
   });
-  return { ok: true, finalPath, size: info.size };
+  return { ok: true, finalPath, size: info.size, mimeType: resolved.mimeType };
 }
 
 /* Generate a short-lived signed URL for a stored object.

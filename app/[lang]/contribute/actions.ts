@@ -15,7 +15,7 @@ import type { ExamType, Semester } from "../../../lib/content/mock-contributor-d
    They receive METADATA plus the QUARANTINE storage path the browser uploaded
    directly to via a signed upload URL (see /api/resources/upload-auth). Each
    action finalizes the object server-side (validates the actual stored bytes —
-   size + PDF magic bytes — then moves it to its canonical summaries/exams
+   size + format magic bytes — then moves it to its canonical summaries/exams
    path) before any metadata row can reference it. The actions NEVER receive
    file bytes.
 
@@ -280,7 +280,7 @@ export async function createNewMaterialAction(
      removes its quarantine object on failure; on the summary's failure we also
      remove any pending exam quarantine. The authoritative server-side size is
      taken from the stored object. */
-  let summaryFinal: { finalPath: string; size: number } | null = null;
+  let summaryFinal: { finalPath: string; size: number; mimeType: string } | null = null;
   if (input.summary.source === "upload" && input.summary.storagePath) {
     const finalized = await finalizeStoredUpload({
       quarantinePath: input.summary.storagePath,
@@ -291,10 +291,14 @@ export async function createNewMaterialAction(
       await compensateQuarantine();
       return { ok: false, errorKey: "validation" };
     }
-    summaryFinal = { finalPath: finalized.finalPath, size: finalized.size };
+    summaryFinal = {
+      finalPath: finalized.finalPath,
+      size: finalized.size,
+      mimeType: finalized.mimeType,
+    };
   }
 
-  let examFinal: { finalPath: string; size: number } | null = null;
+  let examFinal: { finalPath: string; size: number; mimeType: string } | null = null;
   if (input.exam?.storagePath) {
     const finalized = await finalizeStoredUpload({
       quarantinePath: input.exam.storagePath,
@@ -311,7 +315,11 @@ export async function createNewMaterialAction(
       }
       return { ok: false, errorKey: "validation" };
     }
-    examFinal = { finalPath: finalized.finalPath, size: finalized.size };
+    examFinal = {
+      finalPath: finalized.finalPath,
+      size: finalized.size,
+      mimeType: finalized.mimeType,
+    };
   }
 
   const { data: id, error } = await supabase.rpc("create_subject_with_summary", {
@@ -328,7 +336,7 @@ export async function createNewMaterialAction(
     p_summary_file_name:
       input.summary.source === "upload" ? input.summary.fileName : null,
     p_summary_mime_type:
-      input.summary.source === "upload" ? "application/pdf" : null,
+      input.summary.source === "upload" ? summaryFinal?.mimeType ?? null : null,
     p_summary_file_size:
       input.summary.source === "upload" ? summaryFinal?.size ?? null : null,
     p_exam_type: input.exam?.type ?? null,
@@ -336,7 +344,7 @@ export async function createNewMaterialAction(
     p_exam_semester: input.exam?.semester || null,
     p_exam_storage_path: examFinal?.finalPath ?? null,
     p_exam_file_name: input.exam?.fileName ?? null,
-    p_exam_mime_type: input.exam ? "application/pdf" : null,
+    p_exam_mime_type: input.exam ? examFinal?.mimeType ?? null : null,
     p_exam_file_size: examFinal?.size ?? null,
   });
 
@@ -459,12 +467,13 @@ export async function createSummaryAction(
   const supabase = await createClient();
 
   /* The browser uploaded DIRECTLY to Storage into its own quarantine path.
-     Finalize = validate the actual stored bytes (size + PDF magic bytes) with
-     the service-role client, then move the object to its canonical path. Only
-     the final path is ever written to metadata; the quarantine object is
-     removed here on any validation failure. */
+     Finalize = validate the actual stored bytes (size + format magic bytes)
+     with the service-role client, then move the object to its canonical
+     path. Only the final path is ever written to metadata; the quarantine
+     object is removed here on any validation failure. */
   let storedPath: string | null = null;
   let storedSize: number | null = null;
+  let storedMime: string | null = null;
   if (input.source === "upload" && input.storagePath) {
     const finalized = await finalizeStoredUpload({
       quarantinePath: input.storagePath,
@@ -474,6 +483,7 @@ export async function createSummaryAction(
     if (!finalized.ok) return { ok: false, errorKey: "validation" };
     storedPath = finalized.finalPath;
     storedSize = finalized.size;
+    storedMime = finalized.mimeType;
   }
 
   const { data: id, error } = await supabase.rpc("create_summary", {
@@ -484,7 +494,7 @@ export async function createSummaryAction(
     p_videos: input.videos?.filter((v) => v.trim().length > 0) ?? [],
     p_storage_path: input.source === "upload" ? storedPath : null,
     p_file_name: input.source === "upload" ? input.fileName : null,
-    p_mime_type: input.source === "upload" ? "application/pdf" : null,
+    p_mime_type: input.source === "upload" ? storedMime : null,
     p_file_size: input.source === "upload" ? storedSize : null,
   });
 
@@ -562,7 +572,7 @@ export async function updateSummaryAction(
       p_videos: input.videos?.filter((v) => v.trim().length > 0) ?? [],
       p_storage_path: newPath,
       p_file_name: input.fileName,
-      p_mime_type: "application/pdf",
+      p_mime_type: finalized.mimeType,
       p_file_size: finalized.size,
     });
     if (error) {
@@ -696,7 +706,7 @@ export async function createExamAction(
     p_semester: input.semester || null,
     p_storage_path: finalized.finalPath,
     p_file_name: input.fileName,
-    p_mime_type: "application/pdf",
+    p_mime_type: finalized.mimeType,
     p_file_size: finalized.size,
   });
 
@@ -763,7 +773,7 @@ export async function updateExamAction(
       p_semester: input.semester || null,
       p_storage_path: newPath,
       p_file_name: input.fileName,
-      p_mime_type: "application/pdf",
+      p_mime_type: finalized.mimeType,
       p_file_size: finalized.size,
     });
     if (error) {

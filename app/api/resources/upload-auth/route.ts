@@ -21,17 +21,17 @@ import {
    The server remains authoritative:
      - authenticates the actor (contributor/admin/owner, cookie-bound session);
      - applies the existing rate limiter;
-     - validates MIME + size with the existing authoritative validator (PDF
-       only, <= 3 MB);
-     - generates the object path itself (quarantine/<user>/<uuid>.pdf) — the
+     - validates MIME + size with the existing authoritative validator
+       (allowlisted PDF/images, <= 3 MB);
+     - generates the object path itself (quarantine/<user>/<uuid>.<ext>) — the
        client can never pick a path;
      - issues a SHORT-LIVED signed upload URL for exactly that path. The
        service-role key is never exposed, and the signedUrl/token cannot be
        reused beyond its expiry or for any other path.
 
    The uploaded quarantine object is NOT yet validated: the actual stored bytes
-   are re-read (size + PDF magic bytes, first 1 KB) and the object is moved to
-   its canonical path by finalizeStoredUpload() inside the resource Server
+   are re-read (size + format magic bytes, first 1 KB) and the object is moved
+   to its canonical path by finalizeStoredUpload() inside the resource Server
    Actions before any metadata row can reference it. */
 export async function POST(request: NextRequest) {
   const session = await getSessionRole();
@@ -70,7 +70,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: validation.error }, { status: 422 });
   }
 
-  const path = quarantineStoragePath(session.user.id);
+  /* The extension of the quarantine path mirrors the declared (already
+     allowlisted) MIME; finalizeStoredUpload validates the bytes against it. */
+  const path = quarantineStoragePath(session.user.id, mimeType);
   const signed = await createSignedUploadUrl(path);
   if (!signed) {
     return NextResponse.json({ error: "upload_failed" }, { status: 502 });
