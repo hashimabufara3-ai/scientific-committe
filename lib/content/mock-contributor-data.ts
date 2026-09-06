@@ -32,13 +32,22 @@
 
 export const CURRENT_USER_ID = "me";
 
-/* Fictional seeded contributors were removed. authorName() is retained as a
-   generic helper: for any (future) non-owned author id it just returns the
-   raw id, since localization of other users' names is not needed yet. */
+/* Known contributor display names by language. `authorName()` resolves an id
+   against this map; an unknown id must NEVER surface the internal identifier,
+   so it falls back to a localized generic contributor label (the caller's
+   `anonymous` wording when available, otherwise the locale-safe default). */
 export const AUTHOR_NAMES: Record<string, { en: string; ar: string }> = {};
 
-export function authorName(id: string, lang: "en" | "ar"): string {
-  return AUTHOR_NAMES[id]?.[lang] ?? id;
+export function authorName(
+  id: string,
+  lang: "en" | "ar",
+  anonymous?: string
+): string {
+  return (
+    AUTHOR_NAMES[id]?.[lang] ??
+    anonymous ??
+    (lang === "ar" ? "أحد المساهمين" : "A contributor")
+  );
 }
 
 export type ContributorUser = { id: string; name: string };
@@ -138,15 +147,27 @@ export type MockSubject = {
 export type ActivityKind =
   | "subject"
   | "summary"
-  | "video"
   | "exam"
   | "edit"
   | "delete";
 
+/* One entry of the persisted "Recent Activity" feed. Events are written
+   server-side (record_contributor_activity) after every successful contributor
+   mutation and read back through the public recent_contributor_activity RPC —
+   they are never produced by the browser session. */
 export type ActivityEvent = {
   id: string;
   kind: ActivityKind;
+  /* Localized resource title (subject/summary events). Undefined for exam
+     events, which instead carry `examType` and resolve the label locally. */
   title?: string;
+  /* Present only for exam-family events (created/edited/deleted). */
+  examType?: ExamType;
+  /* Localized public display name of the actor. Undefined when the profile
+     has no usable name — the feed falls back to a localized generic label. */
+  actorName?: string;
+  /* True when the signed-in contributor performed the event themselves. */
+  isOwn?: boolean;
   createdAt: number;
 };
 

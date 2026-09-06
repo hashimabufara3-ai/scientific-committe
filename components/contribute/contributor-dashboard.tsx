@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import type {
   ActivityEvent,
-  ActivityKind,
   MockSubject,
 } from "@/lib/content/mock-contributor-data";
 import {
@@ -83,17 +82,18 @@ export default function ContributorDashboard({
   currentUserId,
   currentRole,
   subjects,
+  activities,
 }: {
   lang: string;
   t: ContributeDict;
   currentUserId: string;
   currentRole: Role;
   subjects: MockSubject[];
+  /* The persisted "Recent Activity" feed (server-fed via the page; distributed
+     commit feed, not this session's actions). */
+  activities: ActivityEvent[];
 }) {
   const router = useRouter();
-  /* Activity feed starts empty — only real user actions are recorded via
-     pushActivity(). */
-  const [activities, setActivities] = useState<ActivityEvent[]>([]);
   const [view, setView] = useState<View>({ name: "dashboard" });
   const [openForm, setOpenForm] = useState<OpenForm>(null);
   const [editing, setEditing] = useState<EditingState>(null);
@@ -131,16 +131,6 @@ export default function ContributorDashboard({
     setToast(message);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = setTimeout(() => setToast(null), 2600);
-  }, []);
-
-  const pushActivity = useCallback((kind: ActivityKind, title?: string) => {
-    const event: ActivityEvent = {
-      id: `act-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`,
-      kind,
-      title,
-      createdAt: Date.now(),
-    };
-    setActivities((prev) => [event, ...prev]);
   }, []);
 
   /* Localized message for a Server Action failure. */
@@ -402,8 +392,6 @@ export default function ContributorDashboard({
           }
 
           router.refresh();
-          pushActivity("summary", values.title);
-          if (values.videos.length > 0) pushActivity("video");
           showToast(t.toast.createdSummary);
           setOpenForm(null);
           setEditing(null);
@@ -418,8 +406,6 @@ export default function ContributorDashboard({
         }
 
         router.refresh();
-        pushActivity("summary", values.title);
-        if (values.videos.length > 0) pushActivity("video");
         showToast(t.toast.createdSummary);
         setOpenForm(null);
         setEditing(null);
@@ -427,7 +413,7 @@ export default function ContributorDashboard({
         end();
       }
     },
-    [begin, end, errorText, lang, pushActivity, router, showToast, t, uploadErrorText],
+    [begin, end, errorText, lang, router, showToast, t, uploadErrorText],
   );
 
   const onCreateExam = useCallback(
@@ -460,12 +446,6 @@ export default function ContributorDashboard({
           return;
         }
         router.refresh();
-        pushActivity(
-          "exam",
-          values.type === "midterm"
-            ? t.previousExams.midterm
-            : t.previousExams.final,
-        );
         showToast(t.toast.createdExam);
         setOpenForm(null);
 setEditing(null);
@@ -473,7 +453,7 @@ setEditing(null);
         end();
       }
     },
-    [begin, end, errorText, lang, pushActivity, router, showToast, t, uploadErrorText],
+    [begin, end, errorText, lang, router, showToast, t, uploadErrorText],
   );
 
   /* ---- Edit -------------------------------------------------------------- */
@@ -488,14 +468,13 @@ setEditing(null);
           return;
         }
         router.refresh();
-        pushActivity("edit", values.title);
         showToast(t.toast.updated);
         setEditing(null);
       } finally {
         end();
       }
     },
-    [begin, end, errorText, lang, pushActivity, router, showToast, t],
+    [begin, end, errorText, lang, router, showToast, t],
   );
 
   const onSaveSummary = useCallback(
@@ -542,14 +521,13 @@ setEditing(null);
           return;
         }
         router.refresh();
-        pushActivity("edit", values.title);
         showToast(t.toast.updated);
         setEditing(null);
       } finally {
         end();
       }
     },
-    [begin, end, errorText, lang, pushActivity, router, showToast, t, uploadErrorText],
+    [begin, end, errorText, lang, router, showToast, t, uploadErrorText],
   );
 
   const onSaveExam = useCallback(
@@ -581,19 +559,13 @@ setEditing(null);
           return;
         }
         router.refresh();
-        pushActivity(
-          "edit",
-          values.type === "midterm"
-            ? t.previousExams.midterm
-            : t.previousExams.final,
-        );
         showToast(t.toast.updated);
         setEditing(null);
       } finally {
         end();
       }
     },
-    [begin, end, errorText, lang, pushActivity, router, showToast, t, uploadErrorText],
+    [begin, end, errorText, lang, router, showToast, t, uploadErrorText],
   );
 
   /* ---- Delete (soft, owner-only, via Server Actions) --------------------- */
@@ -676,13 +648,12 @@ setEditing(null);
         }
       }
       router.refresh();
-      pushActivity("delete", target.name);
       showToast(t.toast.deleted);
       setDeleteTarget(null);
     } finally {
       end();
     }
-  }, [begin, deleteTarget, end, errorText, lang, pushActivity, router, showToast, subjects, t, view]);
+  }, [begin, deleteTarget, end, errorText, lang, router, showToast, subjects, t, view]);
 
   /* ---- View navigation --------------------------------------------------- */
 

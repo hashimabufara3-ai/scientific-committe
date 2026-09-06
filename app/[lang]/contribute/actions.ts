@@ -126,6 +126,33 @@ function revalidateResources(lang: string) {
   revalidatePath(`/${lang}/contribute`);
 }
 
+/* Persist one public "Recent Activity" feed event for the CURRENT contributor
+   after a mutation has already succeeded. The RPC derives the actor from the
+   session (require_contributor + auth.uid()) and the event text from the
+   AUTHORITATIVE resource row (subjects / summaries / exam_files) — the client
+   supplies only the action, resource kind and id, so it can never fabricate,
+   re-attribute or invent events (the RPC verifies ownership). Best-effort and
+   deliberately NOT awaited: a feed-write failure (network hiccup, RLS timing)
+   must never fail a content mutation that already committed, so a failure here
+   only drops that event. */
+function recordActivity(
+  action: "subject" | "summary" | "exam" | "edit" | "delete",
+  kind: "subject" | "summary" | "exam",
+  id: string
+) {
+  void createClient()
+    .then((supabase) =>
+      supabase.rpc("record_contributor_activity", {
+        p_action: action,
+        p_kind: kind,
+        p_id: id,
+      })
+    )
+    .catch(() => {
+      /* feed event dropped — the content mutation is unaffected */
+    });
+}
+
 /* Run `mapper` over items with a small, bounded concurrency so a subject with
    many stored objects is cleaned up concurrently without risking an
    uncontrolled burst of parallel HTTP/Storage requests. Resolves once every
@@ -365,7 +392,40 @@ export async function createNewMaterialAction(
 
   revalidateResources(lang);
   revalidatePath(`/${lang}/summaries/${id}`);
-  return { ok: true, id: typeof id === "string" ? id : String(id) };
+  const subjectId = typeof id === "string" ? id : String(id);
+
+  /* The atomic creation RPC returns only the subject id. Resolve the id of the
+     first summary (and the optional exam) inserted inside that transaction so
+     the activity events can anchor to the authoritative rows (Option: the RPC
+     keeps its `returns uuid` signature — returning extra ids from it would
+     require a breaking signature change). */
+  const admin = createAdminClient();
+  const [{ data: newSummary }, { data: newExam }] = await Promise.all([
+    admin
+      .from("summaries")
+      .select("id")
+      .eq("subject_id", subjectId)
+      .eq("author_id", session.user.id)
+      .limit(1)
+      .maybeSingle(),
+    input.exam
+      ? admin
+          .from("exam_files")
+          .select("id")
+          .eq("subject_id", subjectId)
+          .eq("author_id", session.user.id)
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve<{ data: { id: string } | null; error: null }>({
+          data: null,
+          error: null,
+        }),
+  ]);
+
+  recordActivity("subject", "subject", subjectId);
+  if (newSummary?.id) recordActivity("summary", "summary", newSummary.id);
+  if (newExam?.id) recordActivity("exam", "exam", newExam.id);
+  return { ok: true, id: subjectId };
 }
 
 export async function updateSubjectAction(
@@ -390,6 +450,7 @@ export async function updateSubjectAction(
 
   revalidateResources(lang);
   revalidatePath(`/${lang}/summaries/${id}`);
+  recordActivity("edit", "subject", id);
   return { ok: true };
 }
 
@@ -430,6 +491,7 @@ export async function deleteSubjectAction(
 
   revalidateResources(lang);
   revalidatePath(`/${lang}/summaries/${id}`);
+  recordActivity("delete", "subject", id);
   return { ok: true };
 }
 
@@ -512,7 +574,9 @@ export async function createSummaryAction(
 
   revalidateResources(lang);
   revalidatePath(`/${lang}/summaries/${input.subjectId}`);
-  return { ok: true, id: typeof id === "string" ? id : String(id) };
+  const summaryId = typeof id === "string" ? id : String(id);
+  recordActivity("summary", "summary", summaryId);
+  return { ok: true, id: summaryId };
 }
 
 export type UpdateSummaryInput = {
@@ -630,6 +694,7 @@ export async function updateSummaryAction(
 
   revalidateResources(lang);
   revalidatePath(`/${lang}/summaries/${input.subjectId}`);
+  recordActivity("edit", "summary", input.id);
   return { ok: true };
 }
 
@@ -662,6 +727,7 @@ export async function deleteSummaryAction(
 
   revalidateResources(lang);
   revalidatePath(`/${lang}/summaries/${subjectId}`);
+  recordActivity("delete", "summary", id);
   return { ok: true };
 }
 
@@ -721,7 +787,9 @@ export async function createExamAction(
 
   revalidateResources(lang);
   revalidatePath(`/${lang}/summaries/${input.subjectId}`);
-  return { ok: true, id: typeof id === "string" ? id : String(id) };
+  const examId = typeof id === "string" ? id : String(id);
+  recordActivity("exam", "exam", examId);
+  return { ok: true, id: examId };
 }
 
 export type UpdateExamInput = {
@@ -806,6 +874,7 @@ export async function updateExamAction(
 
   revalidateResources(lang);
   revalidatePath(`/${lang}/summaries/${input.subjectId}`);
+  recordActivity("edit", "exam", input.id);
   return { ok: true };
 }
 
@@ -838,5 +907,6 @@ export async function deleteExamAction(
 
   revalidateResources(lang);
   revalidatePath(`/${lang}/summaries/${subjectId}`);
+  recordActivity("delete", "exam", id);
   return { ok: true };
 }

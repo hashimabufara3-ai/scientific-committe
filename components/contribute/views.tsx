@@ -162,7 +162,7 @@ function ownerName(
 ) {
   return isOwned(authorId, currentUserId)
     ? t.you
-    : authorName(authorId, lang as "en" | "ar");
+    : authorName(authorId, lang as "en" | "ar", t.activity.anonymous);
 }
 
 /* Edit / delete for content the current contributor owns (or admin/owner may
@@ -309,7 +309,6 @@ function ContributorHeader({ t, lang }: { t: ContributeDict; lang: string }) {
 const ACTIVITY_ICONS = {
   subject: BookIcon,
   summary: ClipboardIcon,
-  video: VideoIcon,
   exam: FilePdfIcon,
   edit: PencilIcon,
   delete: TrashIcon,
@@ -332,35 +331,48 @@ function ActivityFeed({
       <h3 className="mt-2 text-lg font-semibold tracking-tight text-foreground">
         {t.activity.title}
       </h3>
-      <ul className="mt-5 space-y-1">
-        {sorted.map((event) => {
-          const Icon = ACTIVITY_ICONS[event.kind];
-          const message =
-            event.kind === "subject" ||
-            event.kind === "summary" ||
-            event.kind === "exam" ||
-            event.kind === "edit" ||
-            event.kind === "delete"
-              ? fmt(t.activity[event.kind], { title: event.title ?? "" })
-              : t.activity[event.kind];
-          return (
-            <li
-              key={event.id}
-              className="flex items-start gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-white/[0.03]"
-            >
-              <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-accent">
-                <Icon className="h-4 w-4" />
-              </span>
-              <div className="min-w-0">
-                <p className="text-sm text-foreground">{message}</p>
-                <p className="mt-0.5 text-xs text-muted">
-                  {timeAgo(event.createdAt, now, t)}
-                </p>
-              </div>
-            </li>
-          );
-        })}
-      </ul>
+      {sorted.length === 0 ? (
+        <p className="mt-5 text-sm leading-relaxed text-muted">
+          {t.activity.empty}
+        </p>
+      ) : (
+        <ul className="mt-5 space-y-1">
+          {sorted.map((event) => {
+            const Icon = ACTIVITY_ICONS[event.kind];
+            /* Exam events carry the type enum instead of a title — localize it
+               the same way the exam list labels do. Everything else uses the
+               resource title directly in its sentence template. */
+            const object =
+              event.title ??
+              (event.examType
+                ? t.previousExams[event.examType]
+                : t.activity.untitled);
+            const actor =
+              event.isOwn
+                ? t.you
+                : event.actorName ?? t.activity.anonymous;
+            return (
+              <li
+                key={event.id}
+                className="flex items-start gap-3 rounded-lg px-2 py-2.5 transition-colors hover:bg-white/[0.03]"
+              >
+                <span className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-accent">
+                  <Icon className="h-4 w-4" />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-muted">{actor}</p>
+                  <p className="text-sm text-foreground">
+                    {fmt(t.activity[event.kind], { title: object })}
+                  </p>
+                  <p className="mt-0.5 text-xs text-muted">
+                    {timeAgo(event.createdAt, now, t)}
+                  </p>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </Panel>
   );
 }

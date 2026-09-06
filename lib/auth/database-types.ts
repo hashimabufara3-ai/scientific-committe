@@ -290,6 +290,36 @@ export type Database = {
         };
         Relationships: [];
       };
+      contributor_activity: {
+        Row: {
+          id: string;
+          actor_id: string;
+          action: "subject" | "summary" | "exam" | "edit" | "delete";
+          title_en: string | null;
+          title_ar: string | null;
+          exam_type: "midterm" | "final" | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          actor_id: string;
+          action: "subject" | "summary" | "exam" | "edit" | "delete";
+          title_en?: string | null;
+          title_ar?: string | null;
+          exam_type?: "midterm" | "final" | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          actor_id?: string;
+          action?: "subject" | "summary" | "exam" | "edit" | "delete";
+          title_en?: string | null;
+          title_ar?: string | null;
+          exam_type?: "midterm" | "final" | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -575,6 +605,30 @@ export type Database = {
       delete_exam: {
         Args: { p_id: string };
         Returns: undefined;
+      };
+      record_contributor_activity: {
+        Args: {
+          p_action: "subject" | "summary" | "exam" | "edit" | "delete";
+          p_kind: "subject" | "summary" | "exam";
+          p_id: string;
+        };
+        Returns: undefined;
+      };
+      recent_contributor_activity: {
+        Args: {
+          p_limit?: number;
+        };
+        Returns: {
+          id: string;
+          is_own: boolean;
+          actor_name_en: string | null;
+          actor_name_ar: string | null;
+          action: "subject" | "summary" | "exam" | "edit" | "delete";
+          title_en: string | null;
+          title_ar: string | null;
+          exam_type: "midterm" | "final" | null;
+          created_at: string;
+        }[];
       };
     };
     Enums: {

@@ -2,7 +2,11 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDictionary, hasLocale } from "../dictionaries";
 import { requireRole } from "../../../lib/auth/authorize";
-import { getSubjects } from "../../../lib/content/data-access";
+import {
+  getRecentContributorActivity,
+  getSubjects,
+} from "../../../lib/content/data-access";
+import { createClient } from "../../../lib/auth/supabase-server";
 import ContributorDashboard from "../../../components/contribute/contributor-dashboard";
 
 /* The contribute workspace is always resolved fresh from the database: the
@@ -35,6 +39,12 @@ export default async function ContributePage({
   // (localStorage prototype) is no longer read on the production path.
   const subjects = await getSubjects();
 
+  // The persisted "Recent Activity" feed — latest contributor actions from
+  // across the platform (others included). Public-safe fields only. Runs
+  // through the session's SSR client so the RPC authorizes this user.
+  const supabase = await createClient();
+  const activities = await getRecentContributorActivity(supabase, lang);
+
   return (
     <main id="main-content" className="relative overflow-hidden pb-24">
       <div className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -44,6 +54,7 @@ export default async function ContributePage({
           currentUserId={user.id}
           currentRole={role}
           subjects={subjects}
+          activities={activities}
         />
       </div>
     </main>

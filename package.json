@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test lib/content/file-format.test.mjs"
+    "test": "node --test lib/content/file-format.test.mjs lib/content/contributor-activity.test.mjs lib/content/mock-contributor-data.test.mjs"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.512",

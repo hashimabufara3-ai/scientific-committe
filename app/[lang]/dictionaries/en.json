@@ -194,9 +194,11 @@
     "activity": {
       "kicker": "Feed",
       "title": "Recent activity",
+      "empty": "No recent activity yet — contributions from across the platform will show up here.",
+      "anonymous": "A contributor",
+      "untitled": "Untitled item",
       "subject": "Created subject \"{title}\"",
       "summary": "Published \"{title}\"",
-      "video": "Attached a video",
       "exam": "Shared the \"{title}\" previous exam",
       "edit": "Edited \"{title}\"",
       "delete": "Deleted \"{title}\"",

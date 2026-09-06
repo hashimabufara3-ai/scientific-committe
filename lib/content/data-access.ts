@@ -17,8 +17,11 @@
 
 import { createAnonClient } from "../auth/supabase-anon";
 import { createAdminClient } from "../auth/supabase-server";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type { Database } from "../auth/database-types";
+import { toActivityEvents } from "./contributor-activity";
 import { createSignedResourceUrl } from "./storage";
-import type { MockExam, MockSubject, MockSummary } from "./mock-contributor-data";
+import type { ActivityEvent, MockExam, MockSubject, MockSummary } from "./mock-contributor-data";
 
 /* A contributor-authored summary exposes an optional accessUrl instead of a
    base64 fileData. Casted shape — see below. */
@@ -332,6 +335,26 @@ export async function getSubjectState(id: string): Promise<ResourceState> {
     .maybeSingle();
   if (error || !data) return "missing";
   return data.is_active ? "active" : "deleted";
+}
+
+/* ---------------------------------------------------------------------------
+   Contributor activity feed (server-persisted "Recent Activity").
+--------------------------------------------------------------------------- */
+
+/* Fetch the latest contributor activity events for the signed-in contributor
+   session. Runs the SECURITY DEFINER RPC through the caller's SSR client so
+   the user's cookie session is used (the RPC itself requires contributor-or-
+   above). Returns only public-safe fields — never the actor id — mapped to the
+   frontend ActivityEvent[] shape the dashboard feed renders. */
+export async function getRecentContributorActivity(
+  supabase: SupabaseClient<Database>,
+  lang: string = "en",
+  limit: number = 8
+): Promise<ActivityEvent[]> {
+  const { data } = await supabase.rpc("recent_contributor_activity", {
+    p_limit: limit,
+  });
+  return toActivityEvents(data, { lang });
 }
 
 /* State of a summary/article within a subject, and whether its enclosing
