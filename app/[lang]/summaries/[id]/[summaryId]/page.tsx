@@ -48,11 +48,12 @@ export default async function SummaryDetailPage({
   const summary = await getSummary(id, summaryId);
   if (!subject || !summary) notFound();
 
-  const categoryLabel =
-    dict.resourcesPage.categories.find((c) => c.id === subject.category)
-      ?.label ??
-    subject.category ??
-    "general";
+  /* Only a REAL catalog category (one that resolves to a localized label)
+     produces a category label. Subjects without one render no label — there
+     is no fake GENERAL/default category to present. */
+  const categoryLabel = dict.resourcesPage.categories.find(
+    (c) => c.id === subject.category,
+  )?.label;
 
   const contributions = {
     kicker: dict.resourcesPage.detail.files,

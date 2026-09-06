@@ -327,10 +327,6 @@
       {
         "id": "science",
         "label": "Science"
-      },
-      {
-        "id": "general",
-        "label": "General"
       }
     ],
     "stage": {

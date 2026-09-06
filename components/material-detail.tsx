@@ -55,10 +55,10 @@ export default function MaterialDetail({
   );
 
   const title = displayName(subject.title, subject.titleAr, lang);
-  const categoryLabel =
-    categories.find((c) => c.id === subject.category)?.label ??
-    subject.category ??
-    "general";
+  /* Only a REAL catalog category (one that resolves to a localized label)
+     produces a label. No category renders no pill/kicker — there is no fake
+     GENERAL/default category to present. */
+  const categoryLabel = categories.find((c) => c.id === subject.category)?.label;
 
   return (
     <main id="main-content" className="mx-auto max-w-4xl px-4 pb-24 sm:px-6">
@@ -76,11 +76,13 @@ export default function MaterialDetail({
 
       <Reveal delay={0.05}>
         <header className="mt-8 border-b border-white/10 pb-10">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/25 bg-accent/10 px-3 py-1 text-xs font-medium text-accent">
-              {categoryLabel}
-            </span>
-          </div>
+          {categoryLabel && (
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/25 bg-accent/10 px-3 py-1 text-xs font-medium text-accent">
+                {categoryLabel}
+              </span>
+            </div>
+          )}
 
           <h1 className="mt-5 text-3xl font-semibold tracking-tight text-foreground sm:text-4xl">
             {title}

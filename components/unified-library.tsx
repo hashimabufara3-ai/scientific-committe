@@ -70,8 +70,7 @@ export default function UnifiedLibrary({
       id: subject.id,
       title: displayName(subject.title, subject.titleAr, lang),
       categoryLabel:
-        categories.find((c) => c.id === subject.category)?.label ??
-        (subject.category ?? "general"),
+        categories.find((c) => c.id === subject.category)?.label ?? "",
       count: subjectChildCounts(subject).summaries,
       number: String(index + 1).padStart(2, "0"),
     }));
