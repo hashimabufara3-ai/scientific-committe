@@ -204,12 +204,30 @@
       "summary": "أضاف ملخصًا لمادة «{subject}»",
       "exam": "شارك امتحان {examType} لمادة «{subject}»",
       "edit": "عدّل «{title}»",
+      "deleteSubject": "حذف مادة «{subject}»",
+      "deleteSummary": "حذف ملخصًا من مادة «{subject}»",
+      "deleteExam": "حذف امتحان {examType} من مادة «{subject}»",
       "delete": "حذف «{title}»",
       "time": {
         "justNow": "الآن",
-        "minutes": "قبل {n} دقائق",
-        "hours": "قبل {n} ساعات",
-        "days": "قبل {n} أيام"
+        "minute": {
+          "one": "قبل دقيقة",
+          "two": "قبل دقيقتين",
+          "many": "قبل {n} دقائق",
+          "other": "قبل {n} دقيقة"
+        },
+        "hour": {
+          "one": "قبل ساعة",
+          "two": "قبل ساعتين",
+          "many": "قبل {n} ساعات",
+          "other": "قبل {n} ساعة"
+        },
+        "day": {
+          "one": "منذ يوم",
+          "two": "منذ يومين",
+          "many": "منذ {n} أيام",
+          "other": "منذ {n} يومًا"
+        }
       }
     },
     "forms": {

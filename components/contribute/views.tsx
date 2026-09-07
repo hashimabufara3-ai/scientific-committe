@@ -17,6 +17,7 @@ import type {
   MyContribution,
 } from "@/lib/content/mock-contributor-data";
 import type { Role } from "@/lib/auth/roles";
+import { formatTimeAgo } from "@/lib/content/contributor-activity";
 import {
   ArrowRightIcon,
   BookIcon,
@@ -134,14 +135,8 @@ function examLabel(exam: MockExam, t: ContributeDict): string {
 
 function timeAgo(ts: number, now: number, t: ContributeDict) {
   if (now <= 0) return "";
-  const diff = Math.max(0, now - ts);
-  const minutes = Math.floor(diff / 60_000);
-  if (minutes < 1) return t.activity.time.justNow;
-  if (minutes < 60) return fmt(t.activity.time.minutes, { n: minutes });
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return fmt(t.activity.time.hours, { n: hours });
-  const days = Math.floor(hours / 24);
-  return fmt(t.activity.time.days, { n: days });
+  /* Delegate the dual/plural rules to the pure, tested helper. */
+  return formatTimeAgo(ts, now, t.activity.time);
 }
 
 function isOwned(authorId: string | undefined, currentUserId: string): boolean {
@@ -352,23 +347,45 @@ function ActivityFeed({
                never the raw id. */
             const fallback = t.activity.untitled;
             const subject = event.subjectName ?? fallback;
+            /* Delete wording depends on WHICH resource was deleted. That comes
+               from `resourceKind` (the RPC's kind column). The subject-self
+               delete event keeps its SNAPSHOTTED name (event.title, captured at
+               record time) — it must not depend on a subjects row that may be
+               gone. Summary/exam deletes name the subject via subjectName.
+               Legacy delete rows with no kind fall back to the generic
+               "Deleted :title" wording. */
+            const isSubjectDelete =
+              event.kind === "delete" && event.resourceKind === "subject";
             const sentence =
-              event.kind === "exam"
-                ? fmt(t.activity.exam, {
-                    examType: event.examType
-                      ? t.activity.examTypes[event.examType]
-                      : fallback,
-                    subject,
+              isSubjectDelete
+                ? fmt(t.activity.deleteSubject, {
+                    subject: event.title ?? fallback,
                   })
-                : event.kind === "summary"
-                  ? fmt(t.activity.summary, { subject })
-                  : event.kind === "subject"
-                    ? fmt(t.activity.subject, {
-                        subject: event.title ?? fallback,
+                : event.kind === "delete" && event.resourceKind === "summary"
+                  ? fmt(t.activity.deleteSummary, { subject })
+                  : event.kind === "delete" && event.resourceKind === "exam"
+                    ? fmt(t.activity.deleteExam, {
+                        examType: event.examType
+                          ? t.activity.examTypes[event.examType]
+                          : fallback,
+                        subject,
                       })
-                    : fmt(t.activity[event.kind], {
-                        title: event.title ?? fallback,
-                      });
+                    : event.kind === "delete" || event.kind === "edit"
+                      ? fmt(t.activity[event.kind], {
+                          title: event.title ?? fallback,
+                        })
+                      : event.kind === "exam"
+                        ? fmt(t.activity.exam, {
+                            examType: event.examType
+                              ? t.activity.examTypes[event.examType]
+                              : fallback,
+                            subject,
+                          })
+                        : event.kind === "summary"
+                          ? fmt(t.activity.summary, { subject })
+                          : fmt(t.activity.subject, {
+                              subject: event.title ?? fallback,
+                            });
             const actor =
               event.isOwn
                 ? t.you

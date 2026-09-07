@@ -158,6 +158,12 @@ export type ActivityKind =
 export type ActivityEvent = {
   id: string;
   kind: ActivityKind;
+  /* Resource kind the edit/delete event refers to ('subject'/'summary'/'exam'),
+     carried from the RPC's `kind` column so delete wording can name the kind
+     correctly (e.g. «حذف مادة» vs «حذف ملخصًا من مادة»). Absent for legacy
+     edit/delete rows (NULL kind — never guessed), which fall back to the
+     generic edit/delete wording. */
+  resourceKind?: "subject" | "summary" | "exam";
   /* Localized resource title (subject/summary events). Undefined for exam
      events, which instead carry `examType` and resolve the label locally. */
   title?: string;

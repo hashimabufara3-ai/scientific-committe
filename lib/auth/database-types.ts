@@ -295,6 +295,7 @@ export type Database = {
           id: string;
           actor_id: string;
           action: "subject" | "summary" | "exam" | "edit" | "delete";
+          kind: "subject" | "summary" | "exam" | null;
           title_en: string | null;
           title_ar: string | null;
           exam_type: "midterm" | "final" | null;
@@ -305,6 +306,7 @@ export type Database = {
           id?: string;
           actor_id: string;
           action: "subject" | "summary" | "exam" | "edit" | "delete";
+          kind?: "subject" | "summary" | "exam" | null;
           title_en?: string | null;
           title_ar?: string | null;
           exam_type?: "midterm" | "final" | null;
@@ -315,6 +317,7 @@ export type Database = {
           id?: string;
           actor_id?: string;
           action?: "subject" | "summary" | "exam" | "edit" | "delete";
+          kind?: "subject" | "summary" | "exam" | null;
           title_en?: string | null;
           title_ar?: string | null;
           exam_type?: "midterm" | "final" | null;
@@ -627,6 +630,7 @@ export type Database = {
           actor_name_en: string | null;
           actor_name_ar: string | null;
           action: "subject" | "summary" | "exam" | "edit" | "delete";
+          kind: "subject" | "summary" | "exam" | null;
           title_en: string | null;
           title_ar: string | null;
           exam_type: "midterm" | "final" | null;

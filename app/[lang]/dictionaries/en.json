@@ -205,12 +205,30 @@
       "summary": "Added a summary for \"{subject}\"",
       "exam": "Shared a {examType} exam for \"{subject}\"",
       "edit": "Edited \"{title}\"",
+      "deleteSubject": "Deleted subject \"{subject}\"",
+      "deleteSummary": "Deleted a summary from \"{subject}\"",
+      "deleteExam": "Deleted {examType} exam from \"{subject}\"",
       "delete": "Deleted \"{title}\"",
       "time": {
         "justNow": "just now",
-        "minutes": "{n} min ago",
-        "hours": "{n} hr ago",
-        "days": "{n} days ago"
+        "minute": {
+          "one": "1 minute ago",
+          "two": "2 minutes ago",
+          "many": "{n} minutes ago",
+          "other": "{n} minutes ago"
+        },
+        "hour": {
+          "one": "1 hour ago",
+          "two": "2 hours ago",
+          "many": "{n} hours ago",
+          "other": "{n} hours ago"
+        },
+        "day": {
+          "one": "1 day ago",
+          "two": "2 days ago",
+          "many": "{n} days ago",
+          "other": "{n} days ago"
+        }
       }
     },
     "forms": {
