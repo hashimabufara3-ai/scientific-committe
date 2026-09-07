@@ -252,7 +252,7 @@
       "summaryTitlePlaceholder": "e.g. Subnetting — Cheat Sheet",
       "summaryHint": "Summaries are published and visible to everyone once submitted.",
       "summaryContent": "Note",
-      "sourceTabContent": "Summary text",
+      "sourceTabContent": "Note Text",
       "sourceTabUpload": "Upload file",
       "contentPlaceholder": "Paste or write the note here...",
       "filePrompt": "Choose a file to upload",
