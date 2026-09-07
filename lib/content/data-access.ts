@@ -21,7 +21,15 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../auth/database-types";
 import { toActivityEvents } from "./contributor-activity";
 import { createSignedResourceUrl } from "./storage";
-import type { ActivityEvent, MockExam, MockSubject, MockSummary } from "./mock-contributor-data";
+import { buildMyContributions } from "./mock-contributor-data";
+import type {
+  ActivityEvent,
+  MockExam,
+  MockSubject,
+  MockSummary,
+  MyContribution,
+  MySubjectRef,
+} from "./mock-contributor-data";
 
 /* A contributor-authored summary exposes an optional accessUrl instead of a
    base64 fileData. Casted shape — see below. */
@@ -158,6 +166,126 @@ export async function getSubjects(): Promise<MockSubject[]> {
   return [...bySubject.values()].filter(
     (s) => s.summaries.length > 0 || s.exams.length > 0
   );
+}
+
+/* Server-scoped "My Contributions" for the signed-in contributor.
+
+   The three content queries are scoped to the user's OWN identity at the SQL
+   level (author_id = userId on subjects/summaries/exam_files), so rows
+   authored by other contributors never reach the browser. The parent subjects
+   needed to render the "in {subject}" context come from a targeted id IN (...)
+   query — never the full catalog — and carry only slim MySubjectRef data into
+   the returned items. The pure buildMyContributions() gate then re-asserts
+   ownership and drops any summary/exam whose parent subject is missing or
+   inactive. Runs through the session's SSR client (the user's cookie session),
+   matching getRecentContributorActivity.
+
+   A subject's child counts (for owned subjects) reflect ALL its active
+   children, matching the catalog card the same subject shows. */
+export async function getMyContributions(
+  supabase: SupabaseClient<Database>,
+  userId: string
+): Promise<MyContribution[]> {
+  const [subjectsRes, summariesRes, examsRes] = await Promise.all([
+    supabase
+      .from("subjects")
+      .select("*")
+      .eq("author_id", userId)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("summaries")
+      .select("*")
+      .eq("author_id", userId)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false }),
+    supabase
+      .from("exam_files")
+      .select("*")
+      .eq("author_id", userId)
+      .eq("is_active", true)
+      .order("created_at", { ascending: false }),
+  ]);
+
+  if (subjectsRes.error || summariesRes.error || examsRes.error) return [];
+
+  const ownedSubjects = subjectsRes.data ?? [];
+  const mySummaries = summariesRes.data ?? [];
+  const myExams = examsRes.data ?? [];
+
+  /* Parent subjects needed for "in {subject}" context: every owned subject
+     plus the parents of the user's own summaries/exams. */
+  const parentIds = new Set<string>();
+  for (const s of ownedSubjects) parentIds.add(s.id);
+  for (const s of mySummaries) parentIds.add(s.subject_id);
+  for (const e of myExams) parentIds.add(e.subject_id);
+  if (parentIds.size === 0) return [];
+
+  const parentIdList = [...parentIds];
+  const [parentsRes, parentSummariesRes, parentExamsRes] = await Promise.all([
+    supabase
+      .from("subjects")
+      .select("*")
+      .in("id", parentIdList)
+      .eq("is_active", true),
+    supabase
+      .from("summaries")
+      .select("*")
+      .in("subject_id", parentIdList)
+      .eq("is_active", true),
+    supabase
+      .from("exam_files")
+      .select("*")
+      .in("subject_id", parentIdList)
+      .eq("is_active", true),
+  ]);
+
+  if (parentsRes.error || parentSummariesRes.error || parentExamsRes.error) {
+    return [];
+  }
+
+  /* Assemble each ACTIVE parent with its active children so owned subjects
+     render the same child counts as the catalog card, and build the slim
+     parent-ref map for the "in {subject}" lines. */
+  const parentsById = new Map<string, AccessSubject>();
+  const refs = new Map<string, MySubjectRef>();
+  for (const s of parentsRes.data ?? []) {
+    refs.set(s.id, {
+      id: s.id,
+      title: s.title,
+      titleAr: s.title_ar ?? undefined,
+    });
+    parentsById.set(s.id, {
+      id: s.id,
+      title: s.title,
+      titleAr: s.title_ar ?? undefined,
+      category: s.category ?? undefined,
+      authorId: s.author_id,
+      createdAt: new Date(s.created_at).getTime(),
+      updatedAt: s.updated_at ? new Date(s.updated_at).getTime() : undefined,
+      summaries: [],
+      exams: [],
+    });
+  }
+  for (const s of parentSummariesRes.data ?? []) {
+    parentsById.get(s.subject_id)?.summaries.push(rowToSummary(s));
+  }
+  for (const e of parentExamsRes.data ?? []) {
+    parentsById.get(e.subject_id)?.exams.push(rowToExam(e));
+  }
+
+  return buildMyContributions({
+    ownedSubjects: ownedSubjects
+      .map((s) => parentsById.get(s.id))
+      .filter((s): s is AccessSubject => Boolean(s)),
+    summaries: mySummaries.map((s) => ({
+      ...rowToSummary(s),
+      subjectId: s.subject_id,
+    })),
+    exams: myExams.map((e) => ({ ...rowToExam(e), subjectId: e.subject_id })),
+    parentsBySubjectId: refs,
+    viewerId: userId,
+  });
 }
 
 /* Fetch one active subject (metadata only) with its active summaries/exams,
@@ -345,16 +473,23 @@ export async function getSubjectState(id: string): Promise<ResourceState> {
    session. Runs the SECURITY DEFINER RPC through the caller's SSR client so
    the user's cookie session is used (the RPC itself requires contributor-or-
    above). Returns only public-safe fields — never the actor id — mapped to the
-   frontend ActivityEvent[] shape the dashboard feed renders. */
+   frontend ActivityEvent[] shape the dashboard feed renders.
+
+   The feed is intentionally OTHER contributors only: when `viewerId` is the
+   signed-in user's id, their own events are dropped server-side here (via the
+   pure toActivityEvents helper) so the browser never receives them. This
+   complements the server-scoped "My Contributions" panel; no RLS/migration
+   change is involved — the check is applied to the RPC's own `is_own` flag. */
 export async function getRecentContributorActivity(
   supabase: SupabaseClient<Database>,
   lang: string = "en",
-  limit: number = 8
+  limit: number = 8,
+  viewerId?: string
 ): Promise<ActivityEvent[]> {
   const { data } = await supabase.rpc("recent_contributor_activity", {
     p_limit: limit,
   });
-  return toActivityEvents(data, { lang });
+  return toActivityEvents(data, { lang, viewerId });
 }
 
 /* State of a summary/article within a subject, and whether its enclosing

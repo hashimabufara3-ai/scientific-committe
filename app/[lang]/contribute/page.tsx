@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { getDictionary, hasLocale } from "../dictionaries";
 import { requireRole } from "../../../lib/auth/authorize";
 import {
+  getMyContributions,
   getRecentContributorActivity,
   getSubjects,
 } from "../../../lib/content/data-access";
@@ -41,9 +42,21 @@ export default async function ContributePage({
 
   // The persisted "Recent Activity" feed — latest contributor actions from
   // across the platform (others included). Public-safe fields only. Runs
-  // through the session's SSR client so the RPC authorizes this user.
+  // through the session's SSR client so the RPC authorizes this user. The
+  // feed intentionally shows OTHER contributors only: the viewer's own events
+  // are excluded server-side by passing their user id.
   const supabase = await createClient();
-  const activities = await getRecentContributorActivity(supabase, lang);
+  const activities = await getRecentContributorActivity(
+    supabase,
+    lang,
+    8,
+    user.id
+  );
+
+  // The signed-in contributor's OWN content only — server-scoped by author_id
+  // (subjects/summaries/exam_files) through the session client, never a
+  // client-side filter over other contributors' rows.
+  const myContributions = await getMyContributions(supabase, user.id);
 
   return (
     <main id="main-content" className="relative overflow-hidden pb-24">
@@ -55,6 +68,7 @@ export default async function ContributePage({
           currentRole={role}
           subjects={subjects}
           activities={activities}
+          myContributions={myContributions}
         />
       </div>
     </main>

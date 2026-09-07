@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import type {
   ActivityEvent,
   MockSubject,
+  MyContribution,
 } from "@/lib/content/mock-contributor-data";
 import {
   createNewMaterialAction,
@@ -83,6 +84,7 @@ export default function ContributorDashboard({
   currentRole,
   subjects,
   activities,
+  myContributions,
 }: {
   lang: string;
   t: ContributeDict;
@@ -90,8 +92,11 @@ export default function ContributorDashboard({
   currentRole: Role;
   subjects: MockSubject[];
   /* The persisted "Recent Activity" feed (server-fed via the page; distributed
-     commit feed, not this session's actions). */
+     commit feed, other contributors only — the viewer's own events are
+     excluded server-side). */
   activities: ActivityEvent[];
+  /* The signed-in contributor's OWN content (server-scoped via the page). */
+  myContributions: MyContribution[];
 }) {
   const router = useRouter();
   const [view, setView] = useState<View>({ name: "dashboard" });
@@ -697,6 +702,7 @@ setEditing(null);
        so the overlay is a no-op once the RSC payload arrives. */
     subjects: subjects.filter((s) => !removedIds.has(s.id)),
     activities,
+    myContributions,
     openForm,
     editing,
     deleteTarget,

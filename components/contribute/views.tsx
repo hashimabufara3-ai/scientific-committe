@@ -14,6 +14,7 @@ import type {
   MockExam,
   MockSubject,
   MockSummary,
+  MyContribution,
 } from "@/lib/content/mock-contributor-data";
 import type { Role } from "@/lib/auth/roles";
 import {
@@ -75,6 +76,10 @@ export type Api = {
   view: View;
   subjects: MockSubject[];
   activities: ActivityEvent[];
+  /* The signed-in contributor's OWN content, scoped server-side by author_id
+     in /[lang]/contribute/page.tsx (getMyContributions). The list is rendered
+     as-is — no client-side ownership filtering is ever applied. */
+  myContributions: MyContribution[];
   openForm: OpenForm;
   editing: EditingState;
   deleteTarget: DeleteTarget | null;
@@ -539,31 +544,12 @@ function DashboardView({ api }: { api: Api }) {
 
 /* ---- My contributions list ----------------------------------------------- */
 
+/* Renders the SERVER-SCOPED "My Contributions" list (api.myContributions,
+   resolved by author_id in getMyContributions on the server). Nothing here
+   filters rows by ownership in React — the list already contains only the
+   signed-in contributor's own content, so every line attributes to "you". */
 function MyContributions({ api }: { api: Api }) {
-  const { t, subjects, lang } = api;
-
-  const items: {
-    key: string;
-    kind: "subject" | "summary" | "exam";
-    subject: MockSubject;
-    summary?: MockSummary;
-    exam?: MockExam;
-  }[] = [];
-  for (const subject of subjects) {
-    if (isOwned(subject.authorId, api.currentUserId)) {
-      items.push({ key: `subject-${subject.id}`, kind: "subject", subject });
-    }
-    for (const summary of visibleSummaries(subject)) {
-      if (isOwned(summary.authorId, api.currentUserId)) {
-        items.push({ key: `summary-${summary.id}`, kind: "summary", subject, summary });
-      }
-    }
-    for (const exam of visibleExams(subject)) {
-      if (isOwned(exam.authorId, api.currentUserId)) {
-        items.push({ key: `exam-${exam.id}`, kind: "exam", subject, exam });
-      }
-    }
-  }
+  const { t, lang, myContributions } = api;
 
   return (
     <Panel className="p-5">
@@ -575,12 +561,13 @@ function MyContributions({ api }: { api: Api }) {
           </h3>
         </div>
       </div>
-      {items.length === 0 ? (
+      {myContributions.length === 0 ? (
         <p className="mt-5 text-sm text-muted">{t.contributions.empty}</p>
       ) : (
         <ul className="mt-5 divide-y divide-white/10">
-          {items.map((item) => {
-            const counts = subjectChildCounts(item.subject);
+          {myContributions.map((item) => {
+            const counts =
+              item.kind === "subject" ? subjectChildCounts(item.subject) : null;
             return (
               <li key={item.key} className="flex items-center gap-3 py-3">
                 <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-accent">
@@ -601,13 +588,11 @@ function MyContributions({ api }: { api: Api }) {
                     {item.kind === "subject"
                       ? displayName(item.subject.title, item.subject.titleAr, lang)
                       : item.kind === "summary"
-                        ? displayName(item.summary?.title ?? "", item.summary?.titleAr, lang)
-                        : item.exam
-                          ? examLabel(item.exam, t)
-                          : ""}
+                        ? displayName(item.summary.title, item.summary.titleAr, lang)
+                        : examLabel(item.exam, t)}
                   </button>
                   <p className="mt-0.5 text-xs text-muted">
-                    {item.kind === "subject" ? (
+                    {item.kind === "subject" && counts ? (
                       <>
                         {countPhrase(counts.summaries, "summary", t)} ·{" "}
                         {countPhrase(counts.videos, "video", t)} ·{" "}
@@ -621,7 +606,7 @@ function MyContributions({ api }: { api: Api }) {
                   </p>
                 </div>
                 <span className="text-xs text-muted">
-                  {fmt(t.workspace.addedBy, { name: ownerName(item.subject.authorId, lang, t, api.currentUserId) })}
+                  {fmt(t.workspace.addedBy, { name: ownerName(item.authorId, lang, t, api.currentUserId) })}
                 </span>
               </li>
             );

@@ -29,7 +29,9 @@ export function isContributorActivityRow(value: unknown): value is ActivityRow;
 // RPC rows (newest-first) to the frontend ActivityEvent[] the feed renders.
 // Skips malformed rows, de-duplicates by id, drops events older than the
 // 30-day visibility window, and localizes the actor name / title by `lang`.
+// When `viewerId` is provided, the viewer's own events (is_own = true) are
+// excluded server-side so the feed shows other contributors only.
 export function toActivityEvents(
   rows: readonly ActivityRow[] | null | undefined,
-  options?: { lang?: string; now?: Date | string },
+  options?: { lang?: string; now?: Date | string; viewerId?: string },
 ): ActivityEvent[];

@@ -240,3 +240,103 @@ export function subjectIsDuplicate(
     return s.title_ar ? normalizeTitle(s.title_ar) === normalized : false;
   });
 }
+
+/* ---- My Contributions (server-fed) ---------------------------------------- */
+
+/* The parent-subject context used for a non-subject contribution: enough to
+   render the "in {subject}" line and open the subject workspace. Deliberately
+   slim — never ships the parent's full row (or its other contributors' rows)
+   to the browser. */
+export type MySubjectRef = {
+  id: string;
+  title: string;
+  titleAr?: string;
+};
+
+/* One line of the "My Contributions" list. Every item carries its OWN
+   `authorId` (the contribution's author, not the enclosing subject's) so
+   attribution renders as "you" for the signed-in contributor. `authorId` is
+   the viewer's own id — safe to expose to the viewer themselves. */
+export type MyContribution =
+  | {
+      key: string;
+      kind: "subject";
+      subject: MockSubject;
+      authorId: string;
+    }
+  | {
+      key: string;
+      kind: "summary";
+      subject: MySubjectRef;
+      summary: MockSummary;
+      authorId: string;
+    }
+  | {
+      key: string;
+      kind: "exam";
+      subject: MySubjectRef;
+      exam: MockExam;
+      authorId: string;
+    };
+
+/* Assemble the "My Contributions" list from rows already scoped by the
+   server-side query. The function is a pure, testable ENFORCEMENT layer (not a
+   browse-side filter): regardless of what the caller passes in, only items
+   whose `authorId` equals `viewerId` are ever emitted, and a summary/exam whose
+   parent subject is absent (missing or inactive) is never surfaced. Runs on the
+   server inside data-access.ts; the browser only ever receives the result. */
+export function buildMyContributions(input: {
+  ownedSubjects: MockSubject[];
+  summaries: Array<MockSummary & { subjectId: string }>;
+  exams: Array<MockExam & { subjectId: string }>;
+  parentsBySubjectId: ReadonlyMap<string, MySubjectRef>;
+  viewerId: string;
+}): MyContribution[] {
+  const items: MyContribution[] = [];
+
+  for (const subject of input.ownedSubjects) {
+    if (subject.authorId !== input.viewerId) continue;
+    items.push({
+      key: `subject-${subject.id}`,
+      kind: "subject",
+      subject,
+      authorId: subject.authorId,
+    });
+  }
+
+  for (const summary of input.summaries) {
+    if (summary.authorId !== input.viewerId) continue;
+    const subject = input.parentsBySubjectId.get(summary.subjectId);
+    if (!subject) continue;
+    items.push({
+      key: `summary-${summary.id}`,
+      kind: "summary",
+      subject,
+      summary,
+      authorId: summary.authorId,
+    });
+  }
+
+  for (const exam of input.exams) {
+    if (exam.authorId !== input.viewerId) continue;
+    const subject = input.parentsBySubjectId.get(exam.subjectId);
+    if (!subject) continue;
+    items.push({
+      key: `exam-${exam.id}`,
+      kind: "exam",
+      subject,
+      exam,
+      authorId: exam.authorId,
+    });
+  }
+
+  /* Newest first within each kind; the DB already orders inputs this way, the
+     sort is defensive so rendering never depends on query order. */
+  const createdAt = (item: MyContribution): number =>
+    item.kind === "subject"
+      ? item.subject.createdAt
+      : item.kind === "summary"
+        ? item.summary.createdAt
+        : item.exam.createdAt;
+  return items.sort((a, b) => createdAt(b) - createdAt(a));
+}
