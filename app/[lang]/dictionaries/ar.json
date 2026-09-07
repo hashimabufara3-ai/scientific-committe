@@ -196,9 +196,13 @@
       "empty": "لا توجد نشاطات حديثة بعد — ستظهر هنا مساهمات المساهمين من مختلف المنصّة.",
       "anonymous": "أحد المساهمين",
       "untitled": "بدون عنوان",
-      "subject": "أنشأ مادة «{title}»",
-      "summary": "نشر «{title}»",
-      "exam": "شارك امتحان «{title}» السابق",
+      "examTypes": {
+        "midterm": "منتصف فصل",
+        "final": "نهائي"
+      },
+      "subject": "أضاف مادة «{subject}»",
+      "summary": "أضاف ملخصًا لمادة «{subject}»",
+      "exam": "شارك امتحان {examType} لمادة «{subject}»",
       "edit": "عدّل «{title}»",
       "delete": "حذف «{title}»",
       "time": {

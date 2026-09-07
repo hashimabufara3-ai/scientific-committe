@@ -163,6 +163,11 @@ export type ActivityEvent = {
   title?: string;
   /* Present only for exam-family events (created/edited/deleted). */
   examType?: ExamType;
+  /* Localized name of the parent subject the event belongs to (resolved
+     server-side from the authoritative subject row). Undefined when the event
+     predates subject tagging or its subject is missing — the feed falls back
+     to a localized generic label and never emits the raw id. */
+  subjectName?: string;
   /* Localized public display name of the actor. Undefined when the profile
      has no usable name — the feed falls back to a localized generic label. */
   actorName?: string;

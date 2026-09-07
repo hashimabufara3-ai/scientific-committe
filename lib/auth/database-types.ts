@@ -298,6 +298,7 @@ export type Database = {
           title_en: string | null;
           title_ar: string | null;
           exam_type: "midterm" | "final" | null;
+          subject_id: string | null;
           created_at: string;
         };
         Insert: {
@@ -307,6 +308,7 @@ export type Database = {
           title_en?: string | null;
           title_ar?: string | null;
           exam_type?: "midterm" | "final" | null;
+          subject_id?: string | null;
           created_at?: string;
         };
         Update: {
@@ -316,6 +318,7 @@ export type Database = {
           title_en?: string | null;
           title_ar?: string | null;
           exam_type?: "midterm" | "final" | null;
+          subject_id?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -627,6 +630,8 @@ export type Database = {
           title_en: string | null;
           title_ar: string | null;
           exam_type: "midterm" | "final" | null;
+          subject_name_en: string | null;
+          subject_name_ar: string | null;
           created_at: string;
         }[];
       };

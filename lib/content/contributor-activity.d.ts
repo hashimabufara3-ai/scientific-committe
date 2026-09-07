@@ -17,6 +17,10 @@ export interface ActivityRow {
   title_en: string | null;
   title_ar: string | null;
   exam_type: ExamType | null;
+  /* Parent subject's public bilingual title (joined in the RPC). NULL for
+     events written before parent-subject tagging or with a missing subject. */
+  subject_name_en: string | null;
+  subject_name_ar: string | null;
   created_at: string;
 }
 

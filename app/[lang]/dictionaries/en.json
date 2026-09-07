@@ -197,9 +197,13 @@
       "empty": "No recent activity yet — contributions from across the platform will show up here.",
       "anonymous": "A contributor",
       "untitled": "Untitled item",
-      "subject": "Created subject \"{title}\"",
-      "summary": "Published \"{title}\"",
-      "exam": "Shared the \"{title}\" previous exam",
+      "examTypes": {
+        "midterm": "midterm",
+        "final": "final"
+      },
+      "subject": "Added subject \"{subject}\"",
+      "summary": "Added a summary for \"{subject}\"",
+      "exam": "Shared a {examType} exam for \"{subject}\"",
       "edit": "Edited \"{title}\"",
       "delete": "Deleted \"{title}\"",
       "time": {

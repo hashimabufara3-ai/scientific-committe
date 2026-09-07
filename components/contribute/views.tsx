@@ -344,14 +344,31 @@ function ActivityFeed({
         <ul className="mt-5 space-y-1">
           {sorted.map((event) => {
             const Icon = ACTIVITY_ICONS[event.kind];
-            /* Exam events carry the type enum instead of a title — localize it
-               the same way the exam list labels do. Everything else uses the
-               resource title directly in its sentence template. */
-            const object =
-              event.title ??
-              (event.examType
-                ? t.previousExams[event.examType]
-                : t.activity.untitled);
+            /* Exam/summary/subject sentences name the parent subject, resolved
+               server-side (subjectName). Subject-created events carry the
+               subject name as their resource title, so they use it directly.
+               Edit/delete events keep naming the edited/deleted resource title.
+               Any missing label falls back to a localized generic string —
+               never the raw id. */
+            const fallback = t.activity.untitled;
+            const subject = event.subjectName ?? fallback;
+            const sentence =
+              event.kind === "exam"
+                ? fmt(t.activity.exam, {
+                    examType: event.examType
+                      ? t.activity.examTypes[event.examType]
+                      : fallback,
+                    subject,
+                  })
+                : event.kind === "summary"
+                  ? fmt(t.activity.summary, { subject })
+                  : event.kind === "subject"
+                    ? fmt(t.activity.subject, {
+                        subject: event.title ?? fallback,
+                      })
+                    : fmt(t.activity[event.kind], {
+                        title: event.title ?? fallback,
+                      });
             const actor =
               event.isOwn
                 ? t.you
@@ -366,9 +383,7 @@ function ActivityFeed({
                 </span>
                 <div className="min-w-0">
                   <p className="text-xs font-medium text-muted">{actor}</p>
-                  <p className="text-sm text-foreground">
-                    {fmt(t.activity[event.kind], { title: object })}
-                  </p>
+                  <p className="text-sm text-foreground">{sentence}</p>
                   <p className="mt-0.5 text-xs text-muted">
                     {timeAgo(event.createdAt, now, t)}
                   </p>
