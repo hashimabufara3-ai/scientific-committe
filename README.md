@@ -43,8 +43,8 @@ The application follows a modular Next.js App Router architecture with:
 
 The platform supports:
 
-- 🇬🇧 English
-- 🇵🇸 Arabic
+- English
+- Arabic
 
 Arabic pages use RTL layout while English pages use LTR layout.
 
