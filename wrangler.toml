@@ -1,0 +1,11 @@
+name = "summer-unit-20e9"
+main = "src/worker.js"
+compatibility_date = "2024-12-01"
+
+# Production routes — Worker sits in front of the Render origin.
+# ptuksc.com/*   = apex domain (currently NOT invoked — this is the bug)
+# *.ptuksc.com/* = subdomains (currently working)
+routes = [
+  { pattern = "ptuksc.com/*", zone_name = "ptuksc.com" },
+  { pattern = "*.ptuksc.com/*", zone_name = "ptuksc.com" },
+]
