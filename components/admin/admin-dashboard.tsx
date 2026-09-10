@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState,useState } from "react";
 import type { Dictionary } from "@/app/[lang]/dictionaries";
 import {
   setRoleAction,
@@ -121,12 +121,6 @@ function MemberRow({
      remain open under the success message. On failure ok stays false, so the
      form stays open for the admin to correct the input and retry. Cancel is
      unaffected — it still sets passwordEditing(false) directly. */
-  useEffect(() => {
-    if (passwordState.ok) {
-      setPasswordEditing(false);
-    }
-  }, [passwordState.ok]);
-
   const isSelf = member.id === currentUserId;
   const transitions = ROLES.filter((role) =>
     canAssign(currentRole, member.role, role)
