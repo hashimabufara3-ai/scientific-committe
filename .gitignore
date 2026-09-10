@@ -45,3 +45,7 @@ next-env.d.ts
 .playwright-mcp/
 state-home-top.png
 *.tmp.mjs
+
+# local tool artifacts
+.wrangler/
+supabase/.temp/
