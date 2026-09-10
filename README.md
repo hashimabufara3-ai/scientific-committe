@@ -4,6 +4,12 @@
 
 The platform provides a centralized space for students to discover and share academic resources, workshops, events, and community knowledge.
 
+## Architecture
+
+<p align="center">
+  <img src="docs/architecture/architecture-diagram.jpeg" alt="PTUK Scientific Committee Technical Architecture" width="900">
+</p>
+
 ## Overview
 
 PTUK Scientific Committee is a bilingual student platform designed to support:
