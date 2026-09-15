@@ -99,6 +99,16 @@ const LIMITERS = {
     return createLimiter("1 m", 100, "rl:proxy");
   },
 
+  /* 5 requests / 15 min per IP — resource access/download endpoints (View /
+     Download of stored files). Dedicated keyspace (rl:resource-access) so
+     resource traffic never shares — or consumes — the authentication
+     brute-force limiter (signInIp). Same window/limit as before to preserve
+     current behavior; fail-open via checkRateLimit like every non-auth
+     limiter. */
+  get resourceAccess() {
+    return createLimiter("15 m", 5, "rl:resource-access");
+  },
+
   /* 5 attempts / 15 min per IP — sign-in brute-force */
   get signInIp() {
     return createLimiter("15 m", 5, "rl:signin:ip");
@@ -242,6 +252,44 @@ export async function checkSignInRateLimit(
       err,
       "sign-in rate-limit Upstash unavailable",
       { action: "rateLimit", route: "sign-in" }
+    );
+    return { success: false };
+  }
+}
+
+/**
+ * Fail-closed rate limiter for admin/resource mutations.
+ *
+ * Admin and contribute mutations (LIMITERS.adminAction) are real writes gated
+ * by an authorization check; when Upstash is unreachable we cannot verify the
+ * caller is within limits, so we deny the mutation rather than fail open.
+ * This mirrors checkSignInRateLimit's rationale; every OTHER limiter keeps
+ * the existing fail-open behavior via checkRateLimit.
+ *
+ * Returns { success: false } when:
+ *   - the limiter is null (Redis credentials not configured), OR
+ *   - Upstash errors / times out (fails closed, logged + reported).
+ * Returns { success: true } ONLY on a genuine within-limit result.
+ */
+export async function checkAdminActionRateLimit(
+  limiter: Ratelimit | null,
+  key: string
+): Promise<RateLimitResult> {
+  if (!limiter) return { success: false };
+  try {
+    const result = await limiter.limit(key);
+    return { success: result.success };
+  } catch (err) {
+    logger.warn("admin rate-limit Upstash unavailable, failing closed", {
+      err: err instanceof Error ? err.message : String(err),
+    });
+    /* Report the degradation to Sentry so we know admin-mutation protection
+       is impaired. Only a fixed safe message and fixed non-sensitive metadata
+       are sent: no IP, email, username, keys, tokens, or raw error text. */
+    captureActionError(
+      err,
+      "admin rate-limit Upstash unavailable",
+      { action: "rateLimit", route: "admin" }
     );
     return { success: false };
   }

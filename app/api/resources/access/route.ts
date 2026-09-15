@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
   const { success: ipOk } = await checkRateLimit(
-    LIMITERS.signInIp, // reuse a burst limiter suitable for an IP key
+    LIMITERS.resourceAccess, // dedicated resource-traffic limiter (IP key)
     `resources:access:${ip ?? "unknown"}`
   );
   if (!ipOk) {

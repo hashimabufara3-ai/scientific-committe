@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "rate_limited" }, { status: 429 });
   }
   const { success: ipOk } = await checkRateLimit(
-    LIMITERS.signInIp, // reuse a burst limiter suitable for an IP key
+    LIMITERS.resourceAccess, // dedicated resource-traffic limiter (IP key)
     `resources:download:${ip ?? "unknown"}`
   );
   if (!ipOk) {
@@ -60,15 +60,21 @@ export async function GET(request: NextRequest) {
   }
 
   const admin = createAdminClient();
+  /* Stream instead of buffering: the installed @supabase/storage-js (2.112.3)
+     download() returns a BlobDownloadBuilder whose .asStream() variant resolves
+     to the live fetch Response.body (a web ReadableStream), so the file bytes
+     are never materialized fully in server memory. The response is chunked (no
+     Content-Length). Security is unchanged: the private-bucket fetch still runs
+     with the service-role key server-side, and the storage path/credentials
+     never reach the client. */
   const { data, error } = await admin.storage
     .from(RESOURCES_BUCKET)
-    .download(ref.storagePath);
+    .download(ref.storagePath)
+    .asStream();
 
   if (error || !data) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
-
-  const bytes = await data.arrayBuffer();
 
   /* Sanitize the client-provided stored filename for the Content-Disposition
      header: strip CR/LF (header-injection) and any surrounding quotes/double
@@ -80,12 +86,11 @@ export async function GET(request: NextRequest) {
       .trim()
       .slice(0, 200) || "download";
 
-  return new NextResponse(bytes, {
+  return new NextResponse(data, {
     status: 200,
     headers: {
       "Content-Type": ref.mimeType ?? "application/octet-stream",
       "Content-Disposition": `attachment; filename="${safeName}"`,
-      "Content-Length": String(bytes.byteLength),
       "Cache-Control": "private, no-store",
     },
   });
