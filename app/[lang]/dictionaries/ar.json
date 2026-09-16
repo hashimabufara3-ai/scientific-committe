@@ -266,6 +266,8 @@
       "fileUploadHint": "يُسمح بملفات PDF والصور فقط (JPG, PNG, WebP, GIF). الحد الأقصى للحجم: 3 ميغابايت.",
       "uploadPreparing": "جارٍ تجهيز الرفع…",
       "uploading": "جارٍ الرفع…",
+      "uploadingPercent": "جارٍ الرفع… {percent}%",
+      "uploadRetrying": "انقطع الاتصال — جارٍ الاستئناف…",
       "uploadFinalizing": "جارٍ الإتمام…",
       "publishing": "جارٍ النشر…",
       "fileReadError": "تعذّرت قراءة هذا الملف — جرّب ملفاً آخر.",

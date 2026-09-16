@@ -86,6 +86,36 @@ function buildContentSecurityPolicy(): string {
     }
   }
 
+  /* Resumable (TUS) uploads PATCH bytes directly to the dedicated Storage host
+     (https://<ref>.storage.supabase.co). Add ONLY that exact origin — no
+     `https:` and no wildcard. Prefer an explicit NEXT_PUBLIC_SUPABASE_STORAGE_URL,
+     otherwise derive it from the project API URL. */
+  const storageUrl = process.env.NEXT_PUBLIC_SUPABASE_STORAGE_URL;
+  let storageOrigin: string | null = null;
+  if (storageUrl) {
+    try {
+      storageOrigin = new URL(storageUrl).origin;
+    } catch {
+      /* invalid override — fall through to derivation */
+    }
+  }
+  if (!storageOrigin && supabaseUrl) {
+    try {
+      const host = new URL(supabaseUrl).hostname;
+      if (host.endsWith(".supabase.co") && !host.includes(".storage.")) {
+        const ref = host.slice(0, -".supabase.co".length);
+        if (ref && !ref.includes(".")) {
+          storageOrigin = `https://${ref}.storage.supabase.co`;
+        }
+      }
+    } catch {
+      /* invalid project URL — no storage origin added */
+    }
+  }
+  if (storageOrigin && storageOrigin.startsWith("https://")) {
+    connectSources.push(storageOrigin);
+  }
+
   return [
     "default-src 'self'",
     "script-src 'self' 'unsafe-inline'",

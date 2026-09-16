@@ -40,6 +40,11 @@ import type {
 } from "./types";
 import { SparkIcon } from "../icons";
 import { mimeFromFileName } from "@/lib/content/file-format";
+import {
+  resolveStorageTusEndpoint,
+  TusAuthExpiredError,
+  uploadViaTus,
+} from "@/lib/content/tus-upload";
 
 /* The contributor workspace.
 
@@ -73,9 +78,10 @@ type UploadOutcome =
   | { ok: true; value: UploadResult }
   | { ok: false; reason: UploadFailure };
 
-/* Mirrors RESOURCES_BUCKET in lib/content/storage.ts (server). The bucket is
-   PRIVATE; the browser only ever gets a short-lived signed upload URL. */
-const RESOURCES_BUCKET = "resources";
+/* How many times a single file upload may request a FRESH authorization after
+   its signed token expires. Each fresh authorization yields a new server-issued
+   quarantine path; an expired token is never reused. */
+const MAX_AUTH_ATTEMPTS = 3;
 
 export default function ContributorDashboard({
   lang,
@@ -111,8 +117,14 @@ export default function ContributorDashboard({
      preparing (requesting authorization) → uploading (direct to Storage) →
      finalizing (server validating + finalizing the stored object). */
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>(null);
+  /* Resumable-upload telemetry: 0-100 while bytes are in flight, and whether
+     tus-js-client is reconnecting/resuming after a dropped request. */
+  const [uploadProgress, setUploadProgress] = useState<number | null>(null);
+  const [uploadRetrying, setUploadRetrying] = useState(false);
   const busyRef = useRef(false);
   const toastTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /* Aborts the in-flight TUS upload when the workspace unmounts. */
+  const uploadAbortRef = useRef<AbortController | null>(null);
   /* IDs of subjects whose delete Server Action already succeeded, but whose
      removal has not yet been confirmed by the router.refresh() RSC round trip.
      Only subjects a contributor successfully deleted are added, and only after
@@ -130,6 +142,12 @@ export default function ContributorDashboard({
     setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(id);
+  }, []);
+
+  /* Cancel any in-flight resumable upload when the workspace unmounts so a
+     navigation away does not leave a dangling TUS session. */
+  useEffect(() => {
+    return () => uploadAbortRef.current?.abort();
   }, []);
 
   const showToast = useCallback((message: string) => {
@@ -183,71 +201,110 @@ export default function ContributorDashboard({
     busyRef.current = false;
     setBusy(false);
     setUploadPhase(null);
+    setUploadProgress(null);
+    setUploadRetrying(false);
   }, []);
 
-  /* Upload a raw browser File DIRECTLY to the private Storage bucket via a
-     short-lived signed upload URL issued by /api/resources/upload-auth. Only
-     upload METADATA travels to Render (a few hundred bytes); the 3 MB file body
-     goes straight from the browser to Supabase Storage. The server validates
-     the actual stored object (size + format magic bytes) before any metadata is
-     written (finalizeStoredUpload inside the resource Server Actions). The
-     server's 422 codes map to the same type/size reasons as before. */
+  /* Upload a raw browser File DIRECTLY to the private Storage bucket using
+     resumable TUS, authorized by /api/resources/upload-auth. Only upload
+     METADATA travels to Render (a few hundred bytes); the file body goes
+     straight from the browser to the Supabase Storage TUS endpoint. The
+     server-generated quarantine path + signed token are the only path/token the
+     browser can use. The server validates the actual stored object (size +
+     format magic bytes) before any metadata is written (finalizeStoredUpload
+     inside the resource Server Actions). The server's 422 codes map to the same
+     type/size reasons as before.
+
+     A transient drop is retried/resumed by tus-js-client itself. If the signed
+     token expires we request a FRESH authorization (new server-issued path) and
+     restart, up to MAX_AUTH_ATTEMPTS — an expired token is never reused. */
   const uploadFile = useCallback(
     async (file: File, kind: "summary" | "exam"): Promise<UploadOutcome> => {
-      setUploadPhase("preparing");
-      try {
-        /* Best-effort MIME for the metadata request, falling back to the file
-           extension for files whose browser-reported type is empty. The format
-           gate is enforced server-side on the stored object, not by this
-           string. */
-        const mimeType = file.type || mimeFromFileName(file.name) || "";
-        const res = await fetch("/api/resources/upload-auth", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            kind,
-            fileName: file.name,
-            mimeType,
-            size: file.size,
-          }),
-        });
-        if (res.status === 422) {
-          const body = (await res.json().catch(() => ({}))) as {
-            error?: string;
+      /* Derived from the public Supabase config only; never a hardcoded ref and
+         never a secret. Absent/invalid config fails closed. */
+      const endpoint = resolveStorageTusEndpoint({
+        storageUrl: process.env.NEXT_PUBLIC_SUPABASE_STORAGE_URL,
+        supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL,
+      });
+      if (!endpoint) return { ok: false, reason: "network" };
+
+      /* Best-effort MIME for the metadata request, falling back to the file
+         extension for files whose browser-reported type is empty. The format
+         gate is enforced server-side on the stored object, not by this string. */
+      const mimeType = file.type || mimeFromFileName(file.name) || "";
+
+      for (let attempt = 1; attempt <= MAX_AUTH_ATTEMPTS; attempt++) {
+        setUploadPhase("preparing");
+        setUploadProgress(null);
+        setUploadRetrying(false);
+        try {
+          const res = await fetch("/api/resources/upload-auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              kind,
+              fileName: file.name,
+              mimeType,
+              size: file.size,
+            }),
+          });
+          if (res.status === 422) {
+            const body = (await res.json().catch(() => ({}))) as {
+              error?: string;
+            };
+            return {
+              ok: false,
+              reason: body.error === "too_large" ? "size" : "type",
+            };
+          }
+          if (!res.ok) return { ok: false, reason: "network" };
+          const { path, token } = (await res.json()) as {
+            path: string;
+            token: string;
           };
-          return {
-            ok: false,
-            reason: body.error === "too_large" ? "size" : "type",
-          };
+
+          setUploadPhase("uploading");
+          const controller = new AbortController();
+          uploadAbortRef.current = controller;
+          try {
+            await uploadViaTus({
+              file,
+              endpoint,
+              token,
+              path,
+              contentType: mimeType,
+              signal: controller.signal,
+              handlers: {
+                onProgress: (percent) => setUploadProgress(percent),
+                onResuming: () => setUploadRetrying(true),
+              },
+            });
+            setUploadRetrying(false);
+            return {
+              ok: true,
+              value: {
+                path,
+                fileName: file.name,
+                mimeType,
+                fileSize: file.size,
+              },
+            };
+          } catch (err) {
+            setUploadRetrying(false);
+            /* Expired/invalid signature: ask the server for a fresh token for a
+               NEW server-issued path — never retry an expired token. */
+            if (err instanceof TusAuthExpiredError && attempt < MAX_AUTH_ATTEMPTS) {
+              continue;
+            }
+            return { ok: false, reason: "network" };
+          } finally {
+            uploadAbortRef.current = null;
+          }
+        } catch {
+          return { ok: false, reason: "network" };
         }
-        if (!res.ok) return { ok: false, reason: "network" };
-        const { path, token } = (await res.json()) as {
-          path: string;
-          token: string;
-        };
-
-        setUploadPhase("uploading");
-        const { createClient } = await import(
-          "../../lib/auth/supabase-browser"
-        );
-        const supabase = createClient();
-        const { error } = await supabase.storage
-          .from(RESOURCES_BUCKET)
-          .uploadToSignedUrl(path, token, file);
-        if (error) return { ok: false, reason: "network" };
-
-        return {
-          ok: true,
-          value: {
-            path,
-            fileName: file.name,
-            mimeType,
-            fileSize: file.size,
-          },
-        };
-      } catch {
-        return { ok: false, reason: "network" };
       }
+      return { ok: false, reason: "network" };
     },
     []
   );
@@ -731,12 +788,19 @@ setEditing(null);
         >
           <span
             aria-hidden="true"
-            className="h-2 w-2 animate-pulse rounded-full bg-accent/70"
+            className="h-2 w-2 animate-pulse rounded-full bg-accent/70 motion-reduce:animate-none"
           />
           {uploadPhase === "preparing"
             ? t.forms.uploadPreparing
             : uploadPhase === "uploading"
-              ? t.forms.uploading
+              ? uploadRetrying
+                ? t.forms.uploadRetrying
+                : uploadProgress !== null
+                  ? t.forms.uploadingPercent.replace(
+                      "{percent}",
+                      String(uploadProgress)
+                    )
+                  : t.forms.uploading
               : t.forms.uploadFinalizing}
         </div>
       )}

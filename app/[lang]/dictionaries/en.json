@@ -267,6 +267,8 @@
       "fileUploadHint": "PDF and image files (JPG, PNG, WebP, GIF) only. Maximum size: 3 MB.",
       "uploadPreparing": "Preparing upload…",
       "uploading": "Uploading…",
+      "uploadingPercent": "Uploading… {percent}%",
+      "uploadRetrying": "Connection lost — resuming…",
       "uploadFinalizing": "Finalizing…",
       "publishing": "Publishing…",
       "fileReadError": "That file could not be read — please try another one.",

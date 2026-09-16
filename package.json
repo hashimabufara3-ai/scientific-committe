@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test lib/content/file-format.test.mjs lib/content/contributor-activity.test.mjs lib/content/mock-contributor-data.test.mjs"
+    "test": "node --test lib/content/file-format.test.mjs lib/content/contributor-activity.test.mjs lib/content/mock-contributor-data.test.mjs lib/content/tus-upload.test.mjs"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.512",
@@ -20,7 +20,8 @@
     "next": "16.3.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
-    "remotion": "^4.0.512"
+    "remotion": "^4.0.512",
+    "tus-js-client": "^4.3.1"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
