@@ -78,7 +78,7 @@ function FormShell({ t, canSubmit, submitLabel, onCancel, children, hint, busy, 
 
 /* ---- Shared single-file upload -------------------------------------------
    One "choose a file" flow for every contribution type (summary uploads and
-   previous-exam files): PDF + supported images (JPG, PNG, WebP, GIF), 3 MB
+   previous-exam files): PDF + supported images (JPG, PNG, WebP, GIF), 10 MB
    cap. The raw browser File is kept (never read as a data URL). The dashboard
    uploads that native File DIRECTLY to Storage via a short-lived signed
    upload URL, so only the Storage path + display metadata ever reach Render or
@@ -274,10 +274,10 @@ type MaterialOption = {
   searchText: string;
 };
 
-/* Upload cap (3 MB), kept in sync with MAX_UPLOAD_BYTES in
+/* Upload cap (10 MB), kept in sync with MAX_UPLOAD_BYTES in
    lib/content/storage.ts. The browser sends the raw File via multipart to
    Storage, which has the same cap. The server check is authoritative. */
-const MAX_FILE_BYTES = 3 * 1024 * 1024;
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 /* File-picker `accept` hint: every allowed extension + MIME for PDF and the
    supported images. Advisory only — the server validates the stored bytes. */
