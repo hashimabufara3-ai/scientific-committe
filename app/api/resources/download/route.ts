@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { getResourceStorageRef } from "../../../../lib/content/data-access";
 import { createAdminClient } from "../../../../lib/auth/supabase-server";
 import { RESOURCES_BUCKET } from "../../../../lib/content/storage";
+import { buildContentDisposition } from "../../../../lib/content/content-disposition";
 import {
   checkProxyRateLimit,
   checkRateLimit,
@@ -76,21 +77,14 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
-  /* Sanitize the client-provided stored filename for the Content-Disposition
-     header: strip CR/LF (header-injection) and any surrounding quotes/double
-     quotes, then fall back to a safe default. */
-  const rawName = ref.fileName || "download";
-  const safeName =
-    rawName
-      .replace(/[\r\n\u2028\u2029"]+/g, "")
-      .trim()
-      .slice(0, 200) || "download";
-
+  /* Content-Disposition: use the RFC 6266 / RFC 5987 builder which produces an
+     ASCII-safe header value regardless of what the stored filename contains
+     (Arabic, CJK, emoji, etc.). */
   return new NextResponse(data, {
     status: 200,
     headers: {
       "Content-Type": ref.mimeType ?? "application/octet-stream",
-      "Content-Disposition": `attachment; filename="${safeName}"`,
+      "Content-Disposition": buildContentDisposition(ref.fileName),
       "Cache-Control": "private, no-store",
     },
   });
