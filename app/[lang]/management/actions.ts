@@ -363,11 +363,11 @@ export async function deleteAccountAction(
 /* Which member roles the current actor may reset the password of. Mirrors the
    admin/owner gating used for role changes and deletion (UX + server-side
    enforcement; set_must_change_password() re-checks it in the database):
-     - nobody may act on the Owner;
+     - nobody may reset the Owner except the Owner themselves;
      - Owner may reset anyone except themselves;
      - Admin may reset student/contributor only. */
 function canResetPassword(actor: Role, targetRole: Role): boolean {
-  if (targetRole === "owner") return false;
+  if (targetRole === "owner") return actor === "owner";
   if (actor === "owner") return true;
   if (actor === "admin") {
     return targetRole === "student" || targetRole === "contributor";
