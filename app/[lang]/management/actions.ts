@@ -10,7 +10,7 @@ import {
   createAdminClient,
   createClient,
 } from "../../../lib/auth/supabase-server";
-import { checkRateLimit, LIMITERS } from "../../../lib/security/rate-limit";
+import { checkAdminActionRateLimit, LIMITERS } from "../../../lib/security/rate-limit";
 import { captureActionError } from "../../../lib/security/sentry";
 
 /* Admin mutations.
@@ -96,7 +96,7 @@ export async function setRoleAction(
   const newRole = newRoleRaw as Role;
 
   /* Rate limit: 30 requests / minute per authenticated admin */
-  const { success: allowed } = await checkRateLimit(
+  const { success: allowed } = await checkAdminActionRateLimit(
     LIMITERS.adminAction,
     session.user.id
   );
@@ -164,7 +164,7 @@ export async function transferOwnershipAction(
   }
 
   /* Rate limit: 30 requests / minute per authenticated owner */
-  const { success: allowed } = await checkRateLimit(
+  const { success: allowed } = await checkAdminActionRateLimit(
     LIMITERS.adminAction,
     session.user.id
   );
@@ -173,7 +173,6 @@ export async function transferOwnershipAction(
   if (targetId === session.user.id) {
     return { ok: false, errorKey: "transferSelf" };
   }
-
   const supabase = await createClient();
   const { data: members, error: membersError } = await supabase.rpc(
     "admin_list_members"
@@ -243,7 +242,7 @@ export async function deleteAccountAction(
   }
 
   /* Rate limit: 30 requests / minute per authenticated admin */
-  const { success: allowed } = await checkRateLimit(
+  const { success: allowed } = await checkAdminActionRateLimit(
     LIMITERS.adminAction,
     session.user.id
   );
@@ -403,7 +402,7 @@ export async function changeMemberPasswordAction(
   }
 
   /* Rate limit: 30 requests / minute per authenticated admin */
-  const { success: allowed } = await checkRateLimit(
+  const { success: allowed } = await checkAdminActionRateLimit(
     LIMITERS.adminAction,
     session.user.id
   );
@@ -533,7 +532,7 @@ export async function createCommitteeMemberAction(
   }
 
   /* Rate limit: 30 requests / minute per authenticated admin */
-  const { success: allowed } = await checkRateLimit(
+  const { success: allowed } = await checkAdminActionRateLimit(
     LIMITERS.adminAction,
     session.user.id
   );
@@ -647,7 +646,7 @@ export async function createCommitteeMemberWithAccountAction(
   }
 
   /* Rate limit: 30 requests / minute per authenticated admin */
-  const { success: allowed } = await checkRateLimit(
+  const { success: allowed } = await checkAdminActionRateLimit(
     LIMITERS.adminAction,
     session.user.id
   );
@@ -906,7 +905,7 @@ export async function updateCommitteeMemberAction(
   }
 
   /* Rate limit: 30 requests / minute per authenticated admin */
-  const { success: allowed } = await checkRateLimit(
+  const { success: allowed } = await checkAdminActionRateLimit(
     LIMITERS.adminAction,
     session.user.id
   );
@@ -950,7 +949,7 @@ export async function deleteCommitteeMemberAction(
   }
 
   /* Rate limit: 30 requests / minute per authenticated admin */
-  const { success: allowed } = await checkRateLimit(
+  const { success: allowed } = await checkAdminActionRateLimit(
     LIMITERS.adminAction,
     session.user.id
   );
