@@ -17,7 +17,7 @@
 
 import { createAnonClient } from "../auth/supabase-anon";
 import { createAdminClient } from "../auth/supabase-server";
-import type { SupabaseClient } from "@supabase/supabase-js";
+import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../auth/database-types";
 import { toActivityEvents } from "./contributor-activity";
 import { createSignedResourceUrl } from "./storage";
@@ -121,22 +121,176 @@ function rowToSummary(row: {
   };
 }
 
-/* Fetch all active subjects with their active summaries and exams (metadata
-   only — no file bytes). Assembly is a small number of queries, fine for the
-   catalog size. */
-export async function getSubjects(): Promise<MockSubject[]> {
+const MAX_PAGE_SIZE = 50;
+
+/* Escape LIKE metacharacters (% _ \) so user input matches literally (Postgres'
+   default LIKE escape character is backslash). */
+const escapeLike = (term: string): string =>
+  term.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+
+/* ASCII characters PostgREST's .or() filter grammar treats as delimiters (`,`),
+   grouping (`(` `)`) or quoting (`'` `"`). They cannot be escaped inside an
+   .or() string; a term containing any of them is matched via two single-condition
+   ilike queries instead (each value is its own URL-encoded query parameter, so
+   it is grammar-safe). Non-ASCII punctuation (e.g. Arabic comma U+060C) is NOT
+   part of PostgREST's grammar and stays on the .or() path. */
+const OR_GRAMMAR_HAZARD = /['"(),]/;
+
+/* Slim subject projection used for search matching, counting and page slicing. */
+const SUBJECT_SEARCH_COLUMNS =
+  "id, title, title_ar, category, author_id, created_at, updated_at";
+
+/* Row shape returned by the slim subject projection above. */
+type SubjectSearchRow = {
+  id: string;
+  title: string;
+  title_ar: string | null;
+  category: string | null;
+  author_id: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type SubjectPageResult = {
+  subjects: MockSubject[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+};
+
+/* Fetch one page of ACTIVE subjects with optional bilingual search, returning
+   pagination metadata alongside the page.
+
+   Counting and pagination are based on the subjects that ACTUALLY appear in
+   the catalog UI — an active subject is visible when it has at least one
+   active summary OR one active exam file (matching the original, unfiltered
+   behavior). `total` is therefore the count of visible MATCHING subjects, not
+   of every active subject.
+
+   Query strategy (avoids fetching all summaries/exams globally):
+   1. Resolve the matching active subjects in deterministic order
+      (created_at DESC, then id DESC as stable secondary key). Bilingual
+      search (title/title_ar ilike) runs at the DB level.
+   2. Resolve which of those subjects have active resources using slim
+      subject_id-only queries against summaries and exam_files (bounded to the
+      matching subject ids). That set is what `total` is computed from.
+   3. Slice the visible, still-deterministically-ordered rows for the
+      requested page. Out-of-range pages clamp to the last valid page, so the
+      UI never renders a misleading empty page.
+   4. Fetch summaries/exam_files ONLY for the current page's subject ids. */
+export async function getSubjectsPage(params: {
+  page?: number;
+  pageSize?: number;
+  search?: string;
+}): Promise<SubjectPageResult> {
   const supabase = createAnonClient();
 
-  const [subjectsRes, summariesRes, examsRes] = await Promise.all([
-    supabase.from("subjects").select("*").eq("is_active", true).order("created_at", { ascending: false }),
-    supabase.from("summaries").select("*").eq("is_active", true).order("created_at", { ascending: false }),
-    supabase.from("exam_files").select("*").eq("is_active", true).order("created_at", { ascending: false }),
-  ]);
+  const pageSize = Math.min(
+    Math.max(1, Math.floor(params.pageSize ?? 12)),
+    MAX_PAGE_SIZE
+  );
+  const requestedPage = Number.isFinite(params.page)
+    ? Math.max(1, Math.floor(params.page as number))
+    : 1;
+  const search = (params.search ?? "").trim();
 
-  if (subjectsRes.error) return [];
+  /* 1. Matching active subjects, deterministically ordered.
+
+     Bilingual search runs at the DB level (title ilike q OR title_ar ilike q).
+     The normal path uses a single .or() filter. When the term contains ASCII
+     punctuation reserved by PostgREST's .or() grammar (see OR_GRAMMAR_HAZARD),
+     the same matching is done with two single-condition .ilike queries and the
+     rows unioned/deduped; both paths yield an identical, deterministically
+     ordered row set, so counting and pagination below are unaffected. */
+  let subjectQuery = supabase
+    .from("subjects")
+    .select(SUBJECT_SEARCH_COLUMNS)
+    .eq("is_active", true)
+    .order("created_at", { ascending: false })
+    .order("id", { ascending: false });
+
+  let subjectsRes: SubjectSearchRow[] | null = null;
+  let subjectsError: PostgrestError | null = null;
+
+  const escapedSearch = search ? escapeLike(search) : "";
+  if (search && OR_GRAMMAR_HAZARD.test(search)) {
+    const pattern = `%${escapedSearch}%`;
+    const [titleRes, titleArRes] = await Promise.all([
+      supabase
+        .from("subjects")
+        .select(SUBJECT_SEARCH_COLUMNS)
+        .eq("is_active", true)
+        .ilike("title", pattern)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false }),
+      supabase
+        .from("subjects")
+        .select(SUBJECT_SEARCH_COLUMNS)
+        .eq("is_active", true)
+        .ilike("title_ar", pattern)
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false }),
+    ]);
+    subjectsError = titleRes.error ?? titleArRes.error ?? null;
+    if (!subjectsError) {
+      const byId = new Map<string, SubjectSearchRow>();
+      for (const row of [...(titleRes.data ?? []), ...(titleArRes.data ?? [])]) {
+        byId.set(row.id, row);
+      }
+      subjectsRes = [...byId.values()].sort(
+        (a, b) =>
+          b.created_at.localeCompare(a.created_at) || b.id.localeCompare(a.id)
+      );
+    }
+  } else {
+    if (search) {
+      subjectQuery = subjectQuery.or(
+        `title.ilike.%${escapedSearch}%,title_ar.ilike.%${escapedSearch}%`
+      );
+    }
+    const result = await subjectQuery;
+    subjectsRes = result.data;
+    subjectsError = result.error;
+  }
+
+  if (subjectsError) {
+    return { subjects: [], page: 1, pageSize, total: 0, totalPages: 1 };
+  }
+
+  const matchingIds = (subjectsRes ?? []).map((s) => s.id);
+
+  /* 2. Which matching subjects actually have active summaries/exams. */
+  const visibleIds = new Set<string>();
+  if (matchingIds.length > 0) {
+    const [{ data: summaryRefs }, { data: examRefs }] = await Promise.all([
+      supabase
+        .from("summaries")
+        .select("subject_id")
+        .eq("is_active", true)
+        .in("subject_id", matchingIds),
+      supabase
+        .from("exam_files")
+        .select("subject_id")
+        .eq("is_active", true)
+        .in("subject_id", matchingIds),
+    ]);
+    for (const r of summaryRefs ?? []) visibleIds.add(r.subject_id);
+    for (const r of examRefs ?? []) visibleIds.add(r.subject_id);
+  }
+
+  /* 3. Visible matching subjects, preserving the deterministic DB order. */
+  const visibleRows = (subjectsRes ?? []).filter((s) => visibleIds.has(s.id));
+  const total = visibleRows.length;
+  const totalPages = total > 0 ? Math.ceil(total / pageSize) : 1;
+  const page = Math.min(Math.max(1, requestedPage), totalPages);
+
+  /* 4. The requested page slice of visible subjects. */
+  const from = (page - 1) * pageSize;
+  const pageRows = visibleRows.slice(from, from + pageSize);
+
   const bySubject = new Map<string, AccessSubject>();
-
-  for (const s of subjectsRes.data ?? []) {
+  for (const s of pageRows) {
     bySubject.set(s.id, {
       id: s.id,
       title: s.title,
@@ -150,22 +304,104 @@ export async function getSubjects(): Promise<MockSubject[]> {
     });
   }
 
-  for (const s of summariesRes.data ?? []) {
-    const target = bySubject.get(s.subject_id);
-    if (target) target.summaries.push(rowToSummary(s));
-  }
-  for (const e of examsRes.data ?? []) {
-    const target = bySubject.get(e.subject_id);
-    if (target) target.exams.push(rowToExam(e));
+  /* 5. Fetch summaries/exam_files ONLY for the current page's subjects. */
+  const pageIds = Array.from(bySubject.keys());
+  if (pageIds.length > 0) {
+    const [{ data: summariesRes }, { data: examsRes }] = await Promise.all([
+      supabase
+        .from("summaries")
+        .select("*")
+        .eq("is_active", true)
+        .in("subject_id", pageIds)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("exam_files")
+        .select("*")
+        .eq("is_active", true)
+        .in("subject_id", pageIds)
+        .order("created_at", { ascending: false }),
+    ]);
+    for (const s of summariesRes ?? []) {
+      const target = bySubject.get(s.subject_id);
+      if (target) target.summaries.push(rowToSummary(s));
+    }
+    for (const r of examsRes ?? []) {
+      const target = bySubject.get(r.subject_id);
+      if (target) target.exams.push(rowToExam(r));
+    }
   }
 
-  /* A subject is visible on the catalog only while it retains at least one
-     active resource: active summaries > 0 OR active exams > 0. Subjects with
-     neither are filtered out (soft-deleted children left the subject empty);
-     the subject row itself is never deleted. */
-  return [...bySubject.values()].filter(
-    (s) => s.summaries.length > 0 || s.exams.length > 0
-  );
+  return {
+    subjects: [...bySubject.values()],
+    page,
+    pageSize,
+    total,
+    totalPages,
+  };
+}
+
+/* Fetch active subjects with their active summaries/exams.
+
+   Backward compatible: with NO arguments this keeps the original fetch-all
+   behavior (used by the Contribute page selector). With page/pageSize/search
+   it simply returns the subjects of the requested page — use
+   getSubjectsPage() when pagination metadata is needed. */
+export async function getSubjects(
+  params?: { page?: number; pageSize?: number; search?: string }
+): Promise<MockSubject[]> {
+  if (!params) {
+    const supabase = createAnonClient();
+    const [subjectsRes, summariesRes, examsRes] = await Promise.all([
+      supabase
+        .from("subjects")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("summaries")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false }),
+      supabase
+        .from("exam_files")
+        .select("*")
+        .eq("is_active", true)
+        .order("created_at", { ascending: false }),
+    ]);
+
+    if (subjectsRes.error) return [];
+    const bySubject = new Map<string, AccessSubject>();
+
+    for (const s of subjectsRes.data ?? []) {
+      bySubject.set(s.id, {
+        id: s.id,
+        title: s.title,
+        titleAr: s.title_ar ?? undefined,
+        category: s.category ?? undefined,
+        authorId: s.author_id,
+        createdAt: new Date(s.created_at).getTime(),
+        updatedAt: s.updated_at ? new Date(s.updated_at).getTime() : undefined,
+        summaries: [],
+        exams: [],
+      });
+    }
+
+    for (const s of summariesRes.data ?? []) {
+      const target = bySubject.get(s.subject_id);
+      if (target) target.summaries.push(rowToSummary(s));
+    }
+    for (const e of examsRes.data ?? []) {
+      const target = bySubject.get(e.subject_id);
+      if (target) target.exams.push(rowToExam(e));
+    }
+
+    return [...bySubject.values()].filter(
+      (s) => s.summaries.length > 0 || s.exams.length > 0
+    );
+  }
+
+  const { subjects } = await getSubjectsPage(params);
+  return subjects;
 }
 
 /* Server-scoped "My Contributions" for the signed-in contributor.

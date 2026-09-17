@@ -374,7 +374,11 @@
       "emptyHint": "Student-made summaries, exam papers, and study guides will appear here as contributors publish them.",
       "emptyAction": "Contact the committee",
       "search": "Search materials...",
-      "noResults": "No materials found"
+      "noResults": "No materials found",
+      "pagination": "Pagination",
+      "prev": "Previous",
+      "next": "Next",
+      "pageOf": "Page {page} of {totalPages}"
     },
     "detail": {
       "back": "All summaries",

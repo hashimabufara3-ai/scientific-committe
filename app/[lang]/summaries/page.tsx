@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { getDictionary, hasLocale } from "../dictionaries";
-import { getSubjects } from "../../../lib/content/data-access";
+import { getSubjectsPage } from "../../../lib/content/data-access";
 import SectionHeading from "../../../components/section-heading";
 import Reveal from "../../../components/reveal";
 import UnifiedLibrary from "../../../components/unified-library";
@@ -30,13 +30,48 @@ export async function generateMetadata({
   return { title: dict.resourcesPage.title, description: dict.resourcesPage.subtitle };
 }
 
-export default async function ResourcesPage({
-  params,
-}: PageProps<"/[lang]/summaries">) {
-  const { lang } = await params;
+const DEFAULT_PAGE_SIZE = 12;
+const MAX_PAGE_SIZE = 50;
+
+function normalizePage(value: string | undefined): number {
+  if (value === undefined || value === "") return 1;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 1) return 1;
+  return Math.floor(n);
+}
+
+function normalizePageSize(value: string | undefined): number {
+  if (value === undefined || value === "") return DEFAULT_PAGE_SIZE;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 1) return DEFAULT_PAGE_SIZE;
+  return Math.min(Math.floor(n), MAX_PAGE_SIZE);
+}
+
+export default async function ResourcesPage(
+  props: PageProps<"/[lang]/summaries">
+) {
+  /* In Next.js app router, `params` only carries route-segment values
+     (e.g. { lang }); the search/page/pageSize values arrive via the
+     `searchParams` prop (a Promise in Next.js 16). */
+  const { lang } = await props.params;
   if (!hasLocale(lang)) notFound();
   const dict = await getDictionary(lang);
-  const subjects = await getSubjects();
+
+  const query = await props.searchParams;
+  const readParam = (key: string): string | undefined => {
+    const raw = query[key];
+    if (raw === undefined || raw === null) return undefined;
+    return typeof raw === "string" ? raw : Array.isArray(raw) ? raw[0] : undefined;
+  };
+
+  const search = (readParam("search") ?? "").trim().slice(0, 100);
+  const page = normalizePage(readParam("page"));
+  const pageSize = normalizePageSize(readParam("pageSize"));
+
+  /* Fetch exactly the requested page of visible subjects, with correct
+     total/totalPages. Out-of-range pages are clamped to the last valid page. */
+  const { subjects, page: effectivePage, pageSize: effectivePageSize, total, totalPages } =
+    await getSubjectsPage({ page, pageSize, search });
 
   return (
     <main id="main-content" className="relative overflow-hidden pb-24">
@@ -54,8 +89,17 @@ export default async function ResourcesPage({
           },
           search: dict.resourcesPage.library.search,
           noResults: dict.resourcesPage.library.noResults,
+          pagination: dict.resourcesPage.library.pagination,
+          prev: dict.resourcesPage.library.prev,
+          next: dict.resourcesPage.library.next,
+          pageOf: dict.resourcesPage.library.pageOf,
         }}
         lang={lang}
+        page={effectivePage}
+        pageSize={effectivePageSize}
+        total={total}
+        totalPages={totalPages}
+        search={search}
       >
         <Reveal>
           <div className="relative">
