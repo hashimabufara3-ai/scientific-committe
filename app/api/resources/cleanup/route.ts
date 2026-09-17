@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { sweepOrphanedObjects } from "../../../../lib/content/orphan-cleanup";
+import { constantTimeEqual } from "../../../../lib/security/constant-time";
 
 /* Guarded cleanup endpoint for orphaned Storage objects.
 
@@ -19,7 +20,7 @@ export async function POST(request: NextRequest) {
   }
 
   const auth = request.headers.get("authorization") ?? "";
-  if (auth !== `Bearer ${secret}`) {
+  if (!(await constantTimeEqual(auth, `Bearer ${secret}`))) {
     return NextResponse.json({ error: "unauthorized" }, { status: 401 });
   }
 

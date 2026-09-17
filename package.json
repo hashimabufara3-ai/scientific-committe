@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test lib/content/file-format.test.mjs lib/content/contributor-activity.test.mjs lib/content/mock-contributor-data.test.mjs lib/content/tus-upload.test.mjs"
+    "test": "node --loader ./test/ts-extensionless-loader.mjs --test lib/content/file-format.test.mjs lib/content/contributor-activity.test.mjs lib/content/mock-contributor-data.test.mjs lib/content/tus-upload.test.mjs lib/security/constant-time.test.mjs lib/security/rate-limit.test.mjs"
   },
   "dependencies": {
     "@remotion/cli": "^4.0.512",
@@ -24,6 +24,7 @@
     "tus-js-client": "^4.3.1"
   },
   "devDependencies": {
+    "@playwright/mcp": "^0.0.80",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/react": "^19",
