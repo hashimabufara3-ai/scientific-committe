@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { buildSessionWithRole, getSessionUser } from "../../../lib/auth/authorize";
 import { createAdminClient, createClient } from "../../../lib/auth/supabase-server";
-import { checkRateLimit, LIMITERS } from "../../../lib/security/rate-limit";
+import { checkAdminActionRateLimit, LIMITERS } from "../../../lib/security/rate-limit";
 import { removeResource, finalizeStoredUpload } from "../../../lib/content/storage";
 import { subjectIsDuplicate } from "../../../lib/content/mock-contributor-data";
 import type { ExamType, Semester } from "../../../lib/content/mock-contributor-data";
@@ -86,7 +86,7 @@ async function authorizeContributor(lang: string) {
     .select("role, must_change_password")
     .eq("id", user.id)
     .maybeSingle();
-  const ratePromise = checkRateLimit(
+  const ratePromise = checkAdminActionRateLimit(
     LIMITERS.adminAction,
     `resources:action:${user.id}`
   );

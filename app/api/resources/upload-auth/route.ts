@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getSessionRole } from "../../../../lib/auth/authorize";
 import {
-  checkRateLimit,
+  checkAdminActionRateLimit,
   LIMITERS,
 } from "../../../../lib/security/rate-limit";
 import {
@@ -22,7 +22,7 @@ import {
      - authenticates the actor (contributor/admin/owner, cookie-bound session);
      - applies the existing rate limiter;
      - validates MIME + size with the existing authoritative validator
-       (allowlisted PDF/images, <= 3 MB);
+       (allowlisted PDF/images, <= 10 MB);
      - generates the object path itself (quarantine/<user>/<uuid>.<ext>) — the
        client can never pick a path;
      - issues a SHORT-LIVED signed upload URL for exactly that path. The
@@ -45,7 +45,13 @@ export async function POST(request: NextRequest) {
   ) {
     return NextResponse.json({ error: "forbidden" }, { status: 403 });
   }
-  const { success: allowed } = await checkRateLimit(
+  /* Mirror authorizeContributor(): a valid session alone is not enough — a
+     profile flagged for a forced password change must not obtain upload
+     authority until the password is reset. */
+  if (session.mustChangePassword) {
+    return NextResponse.json({ error: "forbidden" }, { status: 403 });
+  }
+  const { success: allowed } = await checkAdminActionRateLimit(
     LIMITERS.adminAction,
     `resources:upload:${session.user.id}`
   );
