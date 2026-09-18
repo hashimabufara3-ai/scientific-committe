@@ -314,6 +314,7 @@ grant execute on function public.username_available(text) to anon, authenticated
 --    the caller is admin/owner via auth.uid(). The RLS admin-read policy
 --    stays removed — everything flows through this RPC.
 -- ----------------------------------------------------------------------------
+drop function if exists public.admin_list_members(text);
 create or replace function public.admin_list_members(search text default null)
 returns table (
   id uuid,

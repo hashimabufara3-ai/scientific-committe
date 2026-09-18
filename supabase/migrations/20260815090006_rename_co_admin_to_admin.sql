@@ -20,6 +20,8 @@ begin
 exception
   when duplicate_object then
     raise notice 'Enum value already "admin" — skipping rename';
+  when invalid_parameter_value then
+    raise notice 'Enum value "co_admin" does not exist — skipping rename';
 end $$;
 
 -- Step 2: Re-create assign_role() with 'admin' instead of 'co_admin'.
