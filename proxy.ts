@@ -167,10 +167,17 @@ export async function proxy(request: NextRequest) {
     },
   });
 
-  // IMPORTANT: nothing may run between createServerClient and auth.getUser().
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  let user;
+  try {
+    // IMPORTANT: nothing may run between createServerClient and auth.getUser().
+    const {
+      data: { user: getUserResult },
+    } = await supabase.auth.getUser();
+    user = getUserResult;
+  } catch {
+    // auth.getUser() threw; treat as unauthenticated
+    user = undefined;
+  }
 
   /* --- Layer 3: must_change_password enforcement ---
      If the user is forced to change their password, redirect them to the
