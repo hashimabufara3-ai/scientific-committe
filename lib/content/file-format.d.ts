@@ -25,3 +25,10 @@ export function validateFileUpload(
   mime: string,
   size: number
 ): { ok: true; extension: string } | { ok: false; error: "too_large" | "invalid_type" };
+
+export const CANONICAL_RESOURCE_PATH_PATTERN: RegExp;
+export type ResourcePathKind = "summary" | "exam";
+export function isCanonicalResourcePath(
+  path: unknown,
+  kind?: ResourcePathKind
+): boolean;

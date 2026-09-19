@@ -3,6 +3,7 @@ import type { NextRequest } from "next/server";
 import { getResourceStorageRef } from "../../../../lib/content/data-access";
 import { createAdminClient } from "../../../../lib/auth/supabase-server";
 import { RESOURCES_BUCKET } from "../../../../lib/content/storage";
+import { isCanonicalResourcePath } from "../../../../lib/content/file-format";
 import { buildContentDisposition } from "../../../../lib/content/content-disposition";
 import {
   checkProxyRateLimit,
@@ -57,6 +58,15 @@ export async function GET(request: NextRequest) {
 
   const ref = await getResourceStorageRef(kind, id);
   if (!ref) {
+    return NextResponse.json({ error: "not_found" }, { status: 404 });
+  }
+
+  /* Defense-in-depth: the DB row is trusted for AUTHORIZATION (is_active) but
+     not for the object path. A historical/malicious row could carry an
+     arbitrary path, so the value handed to the service-role Storage client must
+     match the same canonical contract the application itself issues. Reject
+     before any Storage call, and never reveal the path. */
+  if (!isCanonicalResourcePath(ref.storagePath, ref.kind)) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 

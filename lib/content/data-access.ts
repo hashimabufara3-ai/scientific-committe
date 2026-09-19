@@ -17,6 +17,7 @@
 
 import { createAnonClient } from "../auth/supabase-anon";
 import { createAdminClient } from "../auth/supabase-server";
+import { isCanonicalResourcePath } from "./file-format";
 import type { PostgrestError, SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "../auth/database-types";
 import { toActivityEvents } from "./contributor-activity";
@@ -649,6 +650,8 @@ export async function getSummaryAccessUrl(
     .eq("is_active", true)
     .maybeSingle();
   if (!summary?.storage_path) return null;
+  /* Defense-in-depth: never mint a signed URL for a path the app did not issue. */
+  if (!isCanonicalResourcePath(summary.storage_path, "summary")) return null;
   return createSignedResourceUrl(summary.storage_path);
 }
 
@@ -665,6 +668,8 @@ export async function getExamAccessUrl(
     .eq("is_active", true)
     .maybeSingle();
   if (!exam?.storage_path) return null;
+  /* Defense-in-depth: never mint a signed URL for a path the app did not issue. */
+  if (!isCanonicalResourcePath(exam.storage_path, "exam")) return null;
   return createSignedResourceUrl(exam.storage_path);
 }
 
