@@ -305,6 +305,61 @@ export async function updatePassword(
   redirect(`/${lang}/auth/sign-in?reset=success`);
 }
 
+/* Self-service password change from the Account page. Unlike updatePassword
+   (the recovery flow, which signs out and requires a fresh sign-in), this
+   keeps the session active. Supabase Auth scopes the change to the current
+   session's user, and the per-user rate-limit bucket is shared with the
+   recovery flow (5 attempts / hour). */
+export async function changeOwnPassword(
+  _prev: AuthState,
+  formData: FormData
+): Promise<AuthState> {
+  const lang = readLang(formData);
+  const dict = await getDictionary(lang);
+  const errors = dict.auth.errors;
+
+  const password = readString(formData, "password");
+  const confirmPassword = readString(formData, "confirmPassword");
+
+  if (password.length < MIN_PASSWORD_LENGTH)
+    return { error: errors.passwordTooShort };
+  if (password !== confirmPassword)
+    return { error: errors.passwordsMismatch };
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) redirect(`/${lang}/auth/sign-in`);
+
+  /* Rate limit: 5 attempts / hour per authenticated user */
+  const { success: allowed } = await checkRateLimit(
+    LIMITERS.updatePassword,
+    user.id
+  );
+  if (!allowed) return { error: errors.rateLimited };
+
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) {
+    /* Unexpected auth-system failure in the self-service password-change path.
+       Expected auth rejections remain user-facing and silent. */
+    if (!isExpectedAuthRejection(error)) {
+      captureActionError(
+        error,
+        "supabase.auth.updateUser account password change failed",
+        {
+          action: "changeOwnPassword",
+          route: `/${lang}/account`,
+          code: error.code,
+        }
+      );
+    }
+    return { error: mapAuthError(error, errors) };
+  }
+
+  return { success: true };
+}
+
 /* Map a profile UPDATE failure back to a localized message. The database is
    the final authority here, so constraint violations are authoritative even
    if the advisory pre-check raced or the reserved list drifted. */

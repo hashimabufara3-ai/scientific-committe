@@ -6,6 +6,7 @@ import SectionHeading from "../../../components/section-heading";
 import { Panel } from "../../../components/contribute/primitives";
 import { SignOutButton } from "../../../components/auth/sign-out-button";
 import { UsernameField } from "../../../components/account/username-field";
+import { ChangePasswordField } from "../../../components/account/change-password-field";
 
 export const dynamic = "force-dynamic";
 
@@ -112,6 +113,13 @@ export default async function AccountPage({
               errors={dict.auth.errors}
             />
           )}
+
+          <ChangePasswordField
+            lang={lang}
+            t={dict.auth.account}
+            showLabel={dict.auth.showPassword}
+            hideLabel={dict.auth.hidePassword}
+          />
 
           <div className="mt-8 border-t border-white/10 pt-6">
             <SignOutButton

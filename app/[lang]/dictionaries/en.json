@@ -631,6 +631,16 @@
         "owner": "Owner"
       },
       "noProfile": "We could not find a profile for this account yet.",
+      "changePassword": {
+        "title": "Change password",
+        "newPassword": "New password",
+        "newPasswordPlaceholder": "At least 6 characters",
+        "confirmPassword": "Confirm new password",
+        "confirmPasswordPlaceholder": "Repeat your new password",
+        "submit": "Change password",
+        "submitting": "Saving…",
+        "success": "Your password has been updated."
+      },
       "signOut": "Sign out"
     },
     "errors": {
