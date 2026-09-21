@@ -14,14 +14,10 @@ import {
   createSummaryAction,
   updateSummaryAction,
   deleteSummaryAction,
-  createExamAction,
-  updateExamAction,
-  deleteExamAction,
 } from "@/app/[lang]/contribute/actions";
 import type {
   ResourceErrorKey,
   SummaryActionResult,
-  ExamActionResult,
 } from "@/app/[lang]/contribute/actions";
 import { ContributeView } from "./views";
 import type { Api } from "./views";
@@ -30,7 +26,6 @@ import type {
   ContributeDict,
   DeleteTarget,
   EditingState,
-  ExamFormValues,
   OpenForm,
   SubjectFormValues,
   SubjectRef,
@@ -316,9 +311,6 @@ export default function ContributorDashboard({
       );
       if (!subject) return undefined;
       if (target.kind === "subject") return subject.authorId;
-      if (target.kind === "exam") {
-        return subject.exams.find((e) => e.id === target.id)?.authorId;
-      }
       return subject.summaries.find((m) => m.id === target.id)?.authorId;
     },
     [subjects],
@@ -331,8 +323,8 @@ export default function ContributorDashboard({
       if (!begin()) return;
       try {
         if (subjectRef.subjectId) {
-          /* Existing material: attach the summary (and any optional exam) to
-             an already-published subject. */
+          /* Existing material: attach the summary to an already-published
+             subject. */
           if (values.source === "upload") {
             if (!values.file) {
               showToast(t.errors.uploadMissing);
@@ -371,34 +363,13 @@ export default function ContributorDashboard({
               return;
             }
           }
-
-          /* Optional previous exam attached to an existing subject —
-             best-effort, never gates the summary being published. */
-          if (values.exam?.file) {
-            const examUpload = await uploadFile(values.exam.file, "exam");
-            if (!examUpload.ok) {
-              showToast(uploadErrorText(examUpload.reason));
-            } else {
-              const created = await createExamAction(lang, {
-                subjectId: subjectRef.subjectId,
-                type: values.exam.type,
-                year: values.exam.year,
-                semester: values.exam.semester,
-                storagePath: examUpload.value.path,
-                fileName: examUpload.value.fileName,
-                mimeType: examUpload.value.mimeType,
-                fileSize: examUpload.value.fileSize,
-              });
-              if (!created.ok) showToast(errorText(created.errorKey));
-            }
-          }
         } else if (subjectRef.title) {
           /* BRAND-NEW material: uploads happen first (the atomic RPC needs the
-             object paths), then ONE server action creates the subject, its
-             first summary and the optional exam inside a single database
-             transaction. The subject is never publicly visible before the
-             creation commits; on any rejection the action compensates by
-             removing the just-uploaded objects. */
+             object paths), then ONE server action creates the subject and its
+             first summary inside a single database transaction. The subject is
+             never publicly visible before the creation commits; on any
+             rejection the action compensates by removing the just-uploaded
+             objects. */
           let upload;
           if (values.source === "upload") {
             if (!values.file) {
@@ -411,14 +382,6 @@ export default function ContributorDashboard({
               return;
             }
             upload = res.value;
-          }
-
-          const exam = values.exam;
-          let examUpload;
-          if (exam?.file) {
-            const res = await uploadFile(exam.file, "exam");
-            if (!res.ok) showToast(uploadErrorText(res.reason));
-            else examUpload = res.value;
           }
           setUploadPhase("finalizing");
 
@@ -435,18 +398,6 @@ export default function ContributorDashboard({
               mimeType: upload?.mimeType,
               fileSize: upload?.fileSize,
             },
-            exam:
-              examUpload && exam
-                ? {
-                    type: exam.type,
-                    year: exam.year,
-                    semester: exam.semester,
-                    storagePath: examUpload.path,
-                    fileName: examUpload.fileName,
-                    mimeType: examUpload.mimeType,
-                    fileSize: examUpload.fileSize,
-                  }
-                : undefined,
           });
           if (!created.ok) {
             showToast(errorText(created.errorKey));
@@ -471,46 +422,6 @@ export default function ContributorDashboard({
         showToast(t.toast.createdSummary);
         setOpenForm(null);
         setEditing(null);
-      } finally {
-        end();
-      }
-    },
-    [begin, end, errorText, lang, router, showToast, t, uploadErrorText],
-  );
-
-  const onCreateExam = useCallback(
-    async (subjectId: string, values: ExamFormValues) => {
-      if (!begin()) return;
-      try {
-        if (!subjectId) return;
-        if (!values.file) {
-          showToast(t.errors.uploadMissing);
-          return;
-        }
-        const upload = await uploadFile(values.file, "exam");
-        if (!upload.ok) {
-          showToast(uploadErrorText(upload.reason));
-          return;
-        }
-        setUploadPhase("finalizing");
-        const created: ExamActionResult = await createExamAction(lang, {
-          subjectId,
-          type: values.type,
-          year: values.year,
-          semester: values.semester,
-          storagePath: upload.value.path,
-          fileName: upload.value.fileName,
-          mimeType: upload.value.mimeType,
-          fileSize: upload.value.fileSize,
-        });
-        if (!created.ok) {
-          showToast(errorText(created.errorKey));
-          return;
-        }
-        router.refresh();
-        showToast(t.toast.createdExam);
-        setOpenForm(null);
-setEditing(null);
       } finally {
         end();
       }
@@ -592,44 +503,6 @@ setEditing(null);
     [begin, end, errorText, lang, router, showToast, t, uploadErrorText],
   );
 
-  const onSaveExam = useCallback(
-    async (subjectId: string, id: string, values: ExamFormValues) => {
-      if (!begin()) return;
-      try {
-        const base = { subjectId, id, type: values.type, year: values.year, semester: values.semester };
-        let r: ExamActionResult;
-        if (values.file) {
-          const upload = await uploadFile(values.file, "exam");
-          if (!upload.ok) {
-            showToast(uploadErrorText(upload.reason));
-            return;
-          }
-          setUploadPhase("finalizing");
-          r = await updateExamAction(lang, {
-            ...base,
-            storagePath: upload.value.path,
-            fileName: upload.value.fileName,
-            mimeType: upload.value.mimeType,
-            fileSize: upload.value.fileSize,
-          });
-        } else {
-          /* No new file — preserve the existing stored one. */
-          r = await updateExamAction(lang, base);
-        }
-        if (!r.ok) {
-          showToast(errorText(r.errorKey));
-          return;
-        }
-        router.refresh();
-        showToast(t.toast.updated);
-        setEditing(null);
-      } finally {
-        end();
-      }
-    },
-    [begin, end, errorText, lang, router, showToast, t, uploadErrorText],
-  );
-
   /* ---- Delete (soft, owner-only, via Server Actions) --------------------- */
 
   const onRequestDelete = useCallback(
@@ -674,12 +547,6 @@ setEditing(null);
         });
         if (view.name === "subject" && view.subjectId === target.id) {
           setView({ name: "dashboard" });
-        }
-      } else if (target.kind === "exam") {
-        const r = await deleteExamAction(lang, target.subjectId, target.id);
-        if (!r.ok) {
-          showToast(errorText(r.errorKey));
-          return;
         }
       } else {
         const r = await deleteSummaryAction(lang, target.subjectId, target.id);
@@ -769,10 +636,8 @@ setEditing(null);
     onStartEdit,
     onCancelEdit: () => setEditing(null),
     onCreateSummary,
-    onCreateExam,
     onSaveSubject,
     onSaveSummary,
-    onSaveExam,
     onRequestDelete,
     onCloseDelete: () => setDeleteTarget(null),
     onConfirmDelete,

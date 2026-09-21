@@ -133,7 +133,6 @@
     },
     "toast": {
       "createdSummary": "Summary published",
-      "createdExam": "Previous exam added",
       "updated": "Changes saved",
       "deleted": "Deleted"
     },
@@ -147,7 +146,6 @@
     },
     "actions": {
       "addSummary": "Add summary",
-      "addExam": "Add previous exam",
       "create": "Create",
       "save": "Save changes",
       "cancel": "Cancel",
@@ -170,17 +168,6 @@
         "videos": "videos",
         "exam": "exam",
         "exams": "exams"
-      }
-    },
-    "previousExams": {
-      "title": "Previous Exams",
-      "noExams": "No previous exams yet — add the first one.",
-      "midterm": "Midterm",
-      "final": "Final",
-      "semesters": {
-        "first": "First semester",
-        "second": "Second semester",
-        "summer": "Summer semester"
       }
     },
     "contributions": {
@@ -271,16 +258,7 @@
       "uploadRetrying": "Connection lost — resuming…",
       "uploadFinalizing": "Finalizing…",
       "publishing": "Publishing…",
-      "fileReadError": "That file could not be read — please try another one.",
-      "examType": "Exam type",
-      "examFile": "Exam file",
-      "year": "Academic year",
-      "yearPlaceholder": "e.g. 2024/2025",
-      "yearUnknown": "Year is unknown",
-      "semester": "Semester",
-      "semesterUnknown": "Unknown",
-      "examHint": "Previous exams are published and visible to everyone once submitted.",
-      "attachExam": "Attach a previous exam, if available"
+      "fileReadError": "That file could not be read — please try another one."
     },
     "delete": {
       "title": "Delete \"{name}\"?",
@@ -401,21 +379,6 @@
         "back": "Back to Summaries"
       }
     }
-  },
-  "previousExams": {
-    "kicker": "Previous exams",
-    "title": "Previous Exams",
-    "subtitle": "Past midterm and final exams shared by students for this material.",
-    "midterm": "Midterm",
-    "final": "Final",
-    "unknownYear": "Unknown year",
-    "unknownSemester": "Unknown semester",
-    "semesters": {
-      "first": "First semester",
-      "second": "Second semester",
-      "summer": "Summer semester"
-    },
-    "empty": "No previous exams yet — the first midterm or final exam shared for this material will appear here."
   },
   "homeResources": {
     "readMore": "Read"

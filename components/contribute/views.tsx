@@ -6,12 +6,10 @@ import {
   authorName,
   displayName,
   subjectChildCounts,
-  visibleExams,
   visibleSummaries,
 } from "@/lib/content/mock-contributor-data";
 import type {
   ActivityEvent,
-  MockExam,
   MockSubject,
   MockSummary,
   MyContribution,
@@ -32,7 +30,7 @@ import {
   VideoIcon,
 } from "../icons";
 import { DeleteDialog } from "./delete-dialog";
-import { ExamForm, SubjectForm, SummaryForm } from "./forms";
+import { SubjectForm, SummaryForm } from "./forms";
 import {
   AccentChip,
   Chip,
@@ -41,13 +39,11 @@ import {
   Kicker,
   Panel,
   PrimaryButton,
-  SectionTitle,
 } from "./primitives";
 import type {
   ContributeDict,
   DeleteTarget,
   EditingState,
-  ExamFormValues,
   OpenForm,
   SubjectFormValues,
   SubjectRef,
@@ -90,10 +86,8 @@ export type Api = {
   onStartEdit: (edit: EditingState) => void;
   onCancelEdit: () => void;
   onCreateSummary: (subjectRef: SubjectRef, values: SummaryFormValues) => void;
-  onCreateExam: (subjectId: string, values: ExamFormValues) => void;
   onSaveSubject: (id: string, values: SubjectFormValues) => void;
   onSaveSummary: (subjectId: string, id: string, values: SummaryFormValues) => void;
-  onSaveExam: (subjectId: string, id: string, values: ExamFormValues) => void;
   onRequestDelete: (target: DeleteTarget) => void;
   onCloseDelete: () => void;
   onConfirmDelete: () => void;
@@ -103,34 +97,12 @@ export type Api = {
 
 function countPhrase(
   n: number,
-  unit: "summary" | "video" | "exam",
+  unit: "summary" | "video",
   t: ContributeDict
 ) {
   const c = t.workspace.counts;
-  const label =
-    n === 1
-      ? c[unit]
-      : c[
-          unit === "summary"
-            ? "summaries"
-            : unit === "video"
-              ? "videos"
-              : "exams"
-        ];
+  const label = n === 1 ? c[unit] : c[unit === "summary" ? "summaries" : "videos"];
   return `${n} ${label}`;
-}
-
-/* A compact, localized label for a previous exam: the type always, then the
-   academic year and semester when known — e.g. "Midterm · 2024/2025 · First". */
-function examLabel(exam: MockExam, t: ContributeDict): string {
-  const type =
-    exam.type === "midterm"
-      ? t.previousExams.midterm
-      : t.previousExams.final;
-  const parts = [type];
-  if (exam.year) parts.push(exam.year);
-  if (exam.semester) parts.push(t.previousExams.semesters[exam.semester]);
-  return parts.join(" · ");
 }
 
 function timeAgo(ts: number, now: number, t: ContributeDict) {
@@ -449,8 +421,7 @@ function SubjectCard({ subject, api }: { subject: MockSubject; api: Api }) {
         <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
           <span className="text-xs text-muted">
             {countPhrase(counts.summaries, "summary", t)} ·{" "}
-            {countPhrase(counts.videos, "video", t)} ·{" "}
-            {countPhrase(counts.exams, "exam", t)}
+            {countPhrase(counts.videos, "video", t)}
           </span>
           <span className="inline-flex items-center gap-1.5 rounded-full border border-accent/40 bg-accent/10 px-3.5 py-1.5 text-xs font-semibold text-accent shadow-[0_0_20px_rgba(45,212,191,0.15)] transition-colors hover:border-accent/60 hover:bg-accent/20 motion-safe:active:scale-[0.97]">
             {t.open}
@@ -597,7 +568,12 @@ function MyContributions({ api }: { api: Api }) {
         <p className="mt-5 text-sm text-muted">{t.contributions.empty}</p>
       ) : (
         <ul className="mt-5 divide-y divide-white/10">
-          {myContributions.map((item) => {
+          {myContributions
+            .filter(
+              (item): item is Exclude<MyContribution, { kind: "exam" }> =>
+                item.kind !== "exam"
+            )
+            .map((item) => {
             const counts =
               item.kind === "subject" ? subjectChildCounts(item.subject) : null;
             return (
@@ -605,10 +581,8 @@ function MyContributions({ api }: { api: Api }) {
                 <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-white/[0.03] text-accent">
                   {item.kind === "subject" ? (
                     <BookIcon className="h-4 w-4" />
-                  ) : item.kind === "summary" ? (
-                    <ClipboardIcon className="h-4 w-4" />
                   ) : (
-                    <FilePdfIcon className="h-4 w-4" />
+                    <ClipboardIcon className="h-4 w-4" />
                   )}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -619,16 +593,13 @@ function MyContributions({ api }: { api: Api }) {
                   >
                     {item.kind === "subject"
                       ? displayName(item.subject.title, item.subject.titleAr, lang)
-                      : item.kind === "summary"
-                        ? displayName(item.summary.title, item.summary.titleAr, lang)
-                        : examLabel(item.exam, t)}
+                      : displayName(item.summary.title, item.summary.titleAr, lang)}
                   </button>
                   <p className="mt-0.5 text-xs text-muted">
                     {item.kind === "subject" && counts ? (
                       <>
                         {countPhrase(counts.summaries, "summary", t)} ·{" "}
-                        {countPhrase(counts.videos, "video", t)} ·{" "}
-                        {countPhrase(counts.exams, "exam", t)}
+                        {countPhrase(counts.videos, "video", t)}
                       </>
                     ) : (
                       fmt(t.contributions.inSubject, {
@@ -686,7 +657,6 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
   const { t, lang } = api;
   const counts = subjectChildCounts(subject);
   const summaries = visibleSummaries(subject);
-  const exams = visibleExams(subject);
 
   return (
     <div>
@@ -730,7 +700,6 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
         <div className="flex flex-wrap gap-2">
           <Chip>{countPhrase(counts.summaries, "summary", t)}</Chip>
           <Chip>{countPhrase(counts.videos, "video", t)}</Chip>
-          <Chip>{countPhrase(counts.exams, "exam", t)}</Chip>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <PrimaryButton
@@ -738,12 +707,6 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
           >
             <PlusIcon className="h-4 w-4" />
             {t.actions.addSummary}
-          </PrimaryButton>
-          <PrimaryButton
-            onClick={() => api.onToggleForm({ kind: "exam", subjectId: subject.id })}
-          >
-            <FilePdfIcon className="h-4 w-4" />
-            {t.actions.addExam}
           </PrimaryButton>
         </div>
       </div>
@@ -764,19 +727,6 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
         </div>
       )}
 
-      {api.openForm?.kind === "exam" && api.openForm.subjectId === subject.id && (
-        <div className="mt-4">
-          <ExamForm
-            t={t}
-            submitLabel={t.actions.publish}
-            onSubmit={(values) => api.onCreateExam(subject.id, values)}
-            onCancel={() => api.onToggleForm(null)}
-            busy={api.busy}
-            phase={api.uploadPhase}
-          />
-        </div>
-      )}
-
       <div className="mt-6 space-y-3">
         {summaries.length === 0 ? (
           <Panel className="border-dashed p-8 text-center text-sm text-muted">
@@ -787,21 +737,6 @@ function SubjectWorkspace({ subject, api }: { subject: MockSubject; api: Api }) 
             <SummaryRow key={summary.id} subjectId={subject.id} summary={summary} api={api} />
           ))
         )}
-      </div>
-
-      <div className="mt-12">
-        <SectionTitle>{t.previousExams.title}</SectionTitle>
-        <div className="mt-4 space-y-3">
-          {exams.length === 0 ? (
-            <Panel className="border-dashed p-8 text-center text-sm text-muted">
-              {t.previousExams.noExams}
-            </Panel>
-          ) : (
-            exams.map((exam) => (
-              <ExamRow key={exam.id} subjectId={subject.id} exam={exam} api={api} />
-            ))
-          )}
-        </div>
       </div>
     </div>
   );
@@ -887,99 +822,6 @@ function SummaryRow({
       {isEditing && (
         <div className="mt-4">
           <SummaryEditInline subjectId={subjectId} initial={summary} api={api} />
-        </div>
-      )}
-    </Panel>
-  );
-}
-
-/* ---- Previous exam row --------------------------------------------------- */
-
-function ExamRow({
-  subjectId,
-  exam,
-  api,
-}: {
-  subjectId: string;
-  exam: MockExam;
-  api: Api;
-}) {
-  const { t, lang } = api;
-  const owned = isOwned(exam.authorId, api.currentUserId);
-  const isEditing = api.editing?.kind === "exam" && api.editing.id === exam.id;
-
-  return (
-    <Panel className="p-5">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <AccentChip>
-              {exam.type === "midterm"
-                ? t.previousExams.midterm
-                : t.previousExams.final}
-            </AccentChip>
-            {exam.year && (
-              <Chip>
-                <span dir="ltr">{exam.year}</span>
-              </Chip>
-            )}
-            {exam.semester && (
-              <Chip>{t.previousExams.semesters[exam.semester]}</Chip>
-            )}
-          </div>
-          <p className="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-muted">
-            <span
-              className="max-w-full truncate font-mono"
-              dir="ltr"
-              title={exam.fileName}
-            >
-              {exam.fileName}
-            </span>
-            <span aria-hidden="true" className="text-muted/40">
-              ·
-            </span>
-            <span>
-              {fmt(t.workspace.addedBy, {
-                name: ownerName(exam.authorId, lang, t, api.currentUserId),
-              })}
-            </span>
-          </p>
-        </div>
-        <RowActions
-          owned={owned}
-          currentRole={api.currentRole}
-          onEdit={() =>
-            api.onStartEdit({ kind: "exam", subjectId, id: exam.id })
-          }
-          onDelete={() =>
-            api.onRequestDelete({
-              kind: "exam",
-              subjectId,
-              id: exam.id,
-              name: examLabel(exam, t),
-            })
-          }
-          t={t}
-        />
-      </div>
-      {isEditing && (
-        <div className="mt-4">
-          <ExamForm
-            t={t}
-            initial={{
-              type: exam.type,
-              year: exam.year ?? "",
-              semester: exam.semester ?? "",
-              fileName: exam.fileName,
-              fileType: exam.fileType,
-              fileSize: exam.fileSize,
-            }}
-            submitLabel={t.actions.save}
-            onSubmit={(values) => api.onSaveExam(subjectId, exam.id, values)}
-            onCancel={api.onCancelEdit}
-            busy={api.busy}
-            phase={api.uploadPhase}
-          />
         </div>
       )}
     </Panel>

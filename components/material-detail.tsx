@@ -9,8 +9,6 @@ import {
 import type { MockSubject } from "@/lib/content/mock-contributor-data";
 import Reveal from "./reveal";
 import SectionHeading from "./section-heading";
-import PreviousExamsSection from "./previous-exams-section";
-import type { PreviousExamsStrings } from "./previous-exams-section";
 import { ArrowRightIcon } from "./icons";
 
 export type Category = { id: string; label: string };
@@ -21,7 +19,6 @@ export type MaterialDetailStrings = {
   files: string;
   filesSubtitle: string;
   readFile: string;
-  exams: PreviousExamsStrings;
 };
 
 /* Public material detail page. `subject` is the server-resolved active catalog
@@ -128,8 +125,6 @@ export default function MaterialDetail({
           </div>
         </section>
       )}
-
-      <PreviousExamsSection subject={subject} strings={strings.exams} />
     </main>
   );
 }

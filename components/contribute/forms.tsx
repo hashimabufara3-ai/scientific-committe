@@ -7,10 +7,9 @@ import {
   displayName,
   subjectSearchText,
 } from "@/lib/content/mock-contributor-data";
-import type { ExamType, MockSubject, Semester } from "@/lib/content/mock-contributor-data";
+import type { MockSubject } from "@/lib/content/mock-contributor-data";
 import type {
   ContributeDict,
-  ExamFormValues,
   SubjectFormValues,
   SubjectRef,
   SummaryFormValues,
@@ -77,10 +76,10 @@ function FormShell({ t, canSubmit, submitLabel, onCancel, children, hint, busy, 
 }
 
 /* ---- Shared single-file upload -------------------------------------------
-   One "choose a file" flow for every contribution type (summary uploads and
-   previous-exam files): PDF + supported images (JPG, PNG, WebP, GIF), 10 MB
-   cap. The raw browser File is kept (never read as a data URL). The dashboard
-   uploads that native File DIRECTLY to Storage via a short-lived signed
+   One "choose a file" flow for summary file uploads: PDF + supported images
+   (JPG, PNG, WebP, GIF), 10 MB cap. The raw browser File is kept (never read
+   as a data URL). The dashboard uploads that native File DIRECTLY to Storage
+   via a short-lived signed
    upload URL, so only the Storage path + display metadata ever reach Render or
    the database. */
 
@@ -368,16 +367,6 @@ export function SummaryForm({
     initial?.videos?.length ? initial.videos : [""]
   );
 
-  /* Optional previous exam attached while creating a NEW subject. Only shown
-     in the new-material flow; left empty, subject creation works as before. */
-  const [examType, setExamType] = useState<ExamType>("midterm");
-  const [examYear, setExamYear] = useState("");
-  const [examYearUnknown, setExamYearUnknown] = useState(false);
-  const [examSemester, setExamSemester] = useState<Semester | "">("");
-  const [examFile, setExamFile] = useState<FileState>(emptyFileState());
-
-  const examFileInputId = useId();
-
   const titleId = useId();
   const contentId = useId();
   const fileInputId = useId();
@@ -404,14 +393,6 @@ export function SummaryForm({
      soft-deleted subject from the (possibly stale) client catalog. */
   const canSubmit =
     title.trim().length > 0 && hasSource && hasSubject && !file.fileError;
-
-  /* Whether an optional previous exam was attached (only meaningful when
-     creating a NEW subject). The exam is entirely optional and never gates
-     publishing. A failed exam upload is ignored rather than blocking. */
-  const hasExam =
-    examFile.fileName.trim().length > 0 &&
-    Boolean(examFile.file) &&
-    !examFile.fileError;
 
   const setVideo = (index: number, value: string) =>
     setVideos((prev) => prev.map((v, i) => (i === index ? value : v)));
@@ -445,17 +426,6 @@ export function SummaryForm({
           fileSize: file.fileSize > 0 ? file.fileSize : undefined,
           content: content.trim(),
           videos: videos.map((v) => v.trim()).filter((v) => v.length > 0),
-          exam: hasExam
-            ? {
-                type: examType,
-                year: examYearUnknown ? "" : examYear,
-                semester: examSemester,
-                file: examFile.file ?? undefined,
-                fileName: examFile.fileName.trim(),
-                fileType: examFile.fileType || undefined,
-                fileSize: examFile.fileSize > 0 ? examFile.fileSize : undefined,
-              }
-            : undefined,
         });
       }}
     >
@@ -717,291 +687,6 @@ export function SummaryForm({
             <p className="text-xs text-muted">{t.forms.videosHint}</p>
           </div>
         </div>
-
-        {/* Optional previous exam — only when creating a NEW subject. Lets the
-            contributor attach a previous exam in the same flow instead of
-            Create subject → Open subject → Add exam. Completely optional. */}
-        {mode === "new" && (
-          <fieldset className="rounded-lg border border-white/10 p-4">
-            <legend className="px-1 text-sm font-medium text-foreground">
-              {t.forms.attachExam}
-            </legend>
-            <div className="space-y-4">
-              <div>
-                <span className="mb-1.5 block text-sm font-medium text-foreground">
-                  {t.forms.examType}
-                </span>
-                <div
-                  className="grid gap-2 sm:grid-cols-2"
-                  role="radiogroup"
-                  aria-label={t.forms.examType}
-                >
-                  {(["midterm", "final"] as const).map((option) => (
-                    <label
-                      key={option}
-                      className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-sm transition-colors ${
-                        examType === option
-                          ? "border-accent/40 bg-accent/[0.06]"
-                          : "border-white/10 bg-white/[0.02] hover:border-white/20"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="attach-exam-type"
-                        className="accent-[#2DD4BF]"
-                        checked={examType === option}
-                        onChange={() => setExamType(option)}
-                      />
-                      <span className="font-medium text-foreground">
-                        {option === "midterm"
-                          ? t.previousExams.midterm
-                          : t.previousExams.final}
-                      </span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Field
-                  label={t.forms.year}
-                  optionalLabel={t.actions.optional}
-                  htmlFor={`${examFileInputId}-year`}
-                >
-                  <TextInput
-                    id={`${examFileInputId}-year`}
-                    dir="ltr"
-                    value={examYear}
-                    disabled={examYearUnknown}
-                    onChange={(e) => setExamYear(e.target.value)}
-                    placeholder={t.forms.yearPlaceholder}
-                  />
-                </Field>
-                <Field
-                  label={t.forms.semester}
-                  optionalLabel={t.actions.optional}
-                  htmlFor={`${examFileInputId}-semester`}
-                >
-                  <select
-                    id={`${examFileInputId}-semester`}
-                    value={examSemester}
-                    onChange={(e) =>
-                      setExamSemester(e.target.value as Semester | "")
-                    }
-                    className="w-full rounded-lg border border-white/10 bg-ink/60 px-3.5 py-2.5 text-sm text-foreground transition-colors focus:border-accent/50 focus:outline-none"
-                  >
-                    <option value="">{t.forms.semesterUnknown}</option>
-                    <option value="first">{t.previousExams.semesters.first}</option>
-                    <option value="second">{t.previousExams.semesters.second}</option>
-                    <option value="summer">{t.previousExams.semesters.summer}</option>
-                  </select>
-                </Field>
-              </div>
-
-              <div>
-                <label className="mb-2 inline-flex cursor-pointer items-center gap-2 text-xs text-muted">
-                  <input
-                    type="checkbox"
-                    className="accent-[#2DD4BF]"
-                    checked={examYearUnknown}
-                    onChange={(e) => {
-                      setExamYearUnknown(e.target.checked);
-                      if (e.target.checked) setExamYear("");
-                    }}
-                  />
-                  {t.forms.yearUnknown}
-                </label>
-                <Field
-                  label={t.forms.examFile}
-                  optionalLabel={t.actions.optional}
-                  htmlFor={examFileInputId}
-                >
-                  <FileUploadField
-                    t={t}
-                    inputId={examFileInputId}
-                    file={examFile}
-                    onFile={setExamFile}
-                  />
-                </Field>
-              </div>
-            </div>
-          </fieldset>
-        )}
-      </FormShell>
-    </form>
-  );
-}
-
-/* ---- Add Previous Exam ----------------------------------------------------
-   A previous exam attaches to one specific material — the form is always
-   opened from that subject's workspace, so the subject is fixed and the
-   contributor only describes the exam: type (midterm/final), an optional
-   academic year and semester, and the exam file itself.
-   ------------------------------------------------------------------------- */
-
-export function ExamForm({
-  t,
-  initial,
-  submitLabel,
-  onSubmit,
-  onCancel,
-  busy,
-  phase,
-}: {
-  t: ContributeDict;
-  initial?: Partial<ExamFormValues>;
-  submitLabel: string;
-  onSubmit: (values: ExamFormValues) => void;
-  onCancel: () => void;
-  busy?: boolean;
-  phase?: UploadPhase;
-}) {
-  const isEditing = Boolean(initial);
-  const [type, setType] = useState<ExamType>(initial?.type ?? "midterm");
-  const [year, setYear] = useState(initial?.year ?? "");
-  /* Year is optional: left empty it stores as unknown. The checkbox is an
-     explicit "this exam's year isn't known" marker that clears the input. */
-  const [yearUnknown, setYearUnknown] = useState(false);
-  const [semester, setSemester] = useState<Semester | "">(
-    initial?.semester ?? ""
-  );
-  const [file, setFile] = useState<FileState>(() => ({
-    fileName: initial?.fileName ?? "",
-    file: null,
-    fileType: initial?.fileType ?? "",
-    fileSize: initial?.fileSize ?? 0,
-    fileError: null,
-    hasExisting: Boolean(initial?.fileName),
-  }));
-
-  const yearId = useId();
-  const semesterId = useId();
-  const fileInputId = useId();
-
-  /* A valid exam contribution has a file: either newly chosen, or the existing
-     one being kept (editing metadata only). */
-  const hasFile =
-    file.fileName.trim().length > 0 &&
-    Boolean(isEditing ? file.file || file.hasExisting : file.file);
-  const canSubmit = hasFile && !file.fileError;
-
-  const typeOptionClass = (selected: boolean) =>
-    `flex cursor-pointer items-center gap-2.5 rounded-lg border px-3.5 py-2.5 text-sm transition-colors ${
-      selected
-        ? "border-accent/40 bg-accent/[0.06]"
-        : "border-white/10 bg-white/[0.02] hover:border-white/20"
-    }`;
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!canSubmit || busy) return;
-        onSubmit({
-          type,
-          year: yearUnknown ? "" : year,
-          semester,
-          file: file.file ?? undefined,
-          fileName: file.fileName.trim(),
-          fileType: file.fileType || undefined,
-          fileSize: file.fileSize > 0 ? file.fileSize : undefined,
-        });
-      }}
-    >
-      <FormShell
-        t={t}
-        canSubmit={canSubmit}
-        submitLabel={submitLabel}
-        onCancel={onCancel}
-        hint={t.forms.examHint}
-        busy={busy}
-        busyLabel={busyLabelFor(phase, t)}
-      >
-        {/* Type — midterm or final */}
-        <fieldset>
-          <legend className="mb-2 text-sm font-medium text-foreground">
-            {t.forms.examType}
-            <span aria-hidden="true" className="ms-1 text-accent">
-              *
-            </span>
-          </legend>
-          <div
-            className="grid gap-2 sm:grid-cols-2"
-            role="radiogroup"
-            aria-label={t.forms.examType}
-          >
-            {(["midterm", "final"] as const).map((option) => (
-              <label key={option} className={typeOptionClass(type === option)}>
-                <input
-                  type="radio"
-                  name="exam-type"
-                  className="accent-[#2DD4BF]"
-                  checked={type === option}
-                  onChange={() => setType(option)}
-                />
-                <span className="font-medium text-foreground">
-                  {option === "midterm"
-                    ? t.previousExams.midterm
-                    : t.previousExams.final}
-                </span>
-              </label>
-            ))}
-          </div>
-        </fieldset>
-
-        {/* Academic year — optional, "unknown" allowed */}
-        <div>
-          <Field
-            label={t.forms.year}
-            optionalLabel={t.actions.optional}
-            htmlFor={yearId}
-          >
-            <TextInput
-              id={yearId}
-              dir="ltr"
-              value={year}
-              disabled={yearUnknown}
-              onChange={(e) => setYear(e.target.value)}
-              placeholder={t.forms.yearPlaceholder}
-            />
-          </Field>
-          <label className="mt-2 inline-flex cursor-pointer items-center gap-2 text-xs text-muted">
-            <input
-              type="checkbox"
-              className="accent-[#2DD4BF]"
-              checked={yearUnknown}
-              onChange={(e) => {
-                setYearUnknown(e.target.checked);
-                if (e.target.checked) setYear("");
-              }}
-            />
-            {t.forms.yearUnknown}
-          </label>
-        </div>
-
-        {/* Semester — optional, "unknown" allowed */}
-        <Field
-          label={t.forms.semester}
-          optionalLabel={t.actions.optional}
-          htmlFor={semesterId}
-        >
-          <select
-            id={semesterId}
-            value={semester}
-            onChange={(e) => setSemester(e.target.value as Semester | "")}
-            className="w-full rounded-lg border border-white/10 bg-ink/60 px-3.5 py-2.5 text-sm text-foreground transition-colors focus:border-accent/50 focus:outline-none"
-          >
-            <option value="">{t.forms.semesterUnknown}</option>
-            <option value="first">{t.previousExams.semesters.first}</option>
-            <option value="second">{t.previousExams.semesters.second}</option>
-            <option value="summer">{t.previousExams.semesters.summer}</option>
-          </select>
-        </Field>
-
-        {/* Exam file — required */}
-        <Field label={t.forms.examFile} required htmlFor={fileInputId}>
-          <FileUploadField t={t} inputId={fileInputId} file={file} onFile={setFile} />
-        </Field>
       </FormShell>
     </form>
   );

@@ -2,7 +2,7 @@
 
 /* Shared helpers for files persisted in the content store — uploaded bytes as
    a data URL (fileData) or a static reference (fileUrl). Used by the public
-   file cards and the Previous Exams section so both render files identically.
+   summary file cards so uploaded files render identically.
 
    Production (Postgres + Supabase Storage) files have NO base64 fileData. They
    are referenced by kind+id and fetched on demand as a short-lived signed URL

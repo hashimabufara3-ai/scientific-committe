@@ -51,11 +51,6 @@ export default async function ResourceDetailPage({
         files: dict.resourcesPage.detail.files,
         filesSubtitle: dict.resourcesPage.detail.filesSubtitle,
         readFile: dict.resourcesPage.detail.readFile,
-        exams: {
-          ...dict.previousExams,
-          download: dict.resourcesPage.detail.download,
-          view: dict.resourcesPage.detail.view,
-        },
       }}
     />
   );
